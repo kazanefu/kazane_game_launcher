@@ -165,3 +165,45 @@ launcher/release.json
 - clippyを使用して、コードの品質を保つようにする予定
 - warningsをすべて解消して、コードの品質を保つようにする予定
 
+## モジュール一覧
+
+- main.rs: アプリケーションのエントリーポイント
+- ui/: ユーザーインターフェースに関連するコード(eguiのコードなどで画面の描画とユーザー入力処理のみを担当し、ロジックは担当しない)
+  - mod.rs
+  - search/
+    - mod.rs
+    - ...後で追加
+  - library/
+    - mod.rs
+    - ...後で追加
+  - settings/
+    - mod.rs
+    - ...後で追加
+- data/: データの管理に関連するコード(ゲームの情報の取得や保存など)
+  - mod.rs
+  - local/
+    - mod.rs
+    - game_data.rs: local/game_data.jsonの管理に関連するコード
+    - settings.rs: launcher/settings.jsonの管理に関連するコード
+  - remote/
+    - mod.rs
+    - github.rs: GitHub APIを使用してゲームのリストやリリース情報を取得するコード
+    - game_list.rs: GitHubのdata/game_list.jsonの管理に関連するコード
+    - release.rs: GitHubのlauncher/release.jsonの管理に関連するコード
+- search/: ゲームの検索に関連するコード(ゲームの検索ロジックなど)
+  - mod.rs:
+  - ...後で追加
+- game_executor/: ゲームの起動に関連するコード(ゲームのプロセスの管理など)
+  - mod.rs
+  - status.rs: ゲームの起動状態の管理に関連するコード
+  - boot.rs: ゲームの起動に関連するコード
+  - kill.rs: ゲームの強制終了に関連するコード
+- installer/: ゲームのインストール/アンインストール/アップデートに関連するコード
+  - mod.rs
+  - install.rs: ゲームのインストールに関連するコード
+  - uninstall.rs: ゲームのアンインストールに関連するコード
+  - update.rs: ゲームのアップデートに関連するコード
+- utils/: その他のユーティリティコード
+  - mod.rs
+  - file.rs: ファイル操作に関連するコード(例: ファイルのダウンロードや解凍など)
+  - ...後で追加
