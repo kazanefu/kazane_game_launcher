@@ -37,6 +37,8 @@ Kazane Game Launcherはkazane(私)が開発したゲームを検索/インスト
 - Markdown表示: egui_commonmark
 - データの保存: serde + json + ファイルシステム
 - GitHub APIを使用してゲームのリストを取得し、インストールやアップデートの際に最新のリリース情報を取得する
+- 非同期ランタイム: tokio
+- その他のユーティリティクレート: zip, directories, etc.
 
 ## データ構造
 
@@ -79,6 +81,7 @@ launcher/release.json
 - ゲームのリリース情報
   - バージョン
   - Github releaseのURL(zipや.exeのどれをインストールするのかを判断するため)
+  - ファイルタイプ(zipか.exeか)
   - zipの場合
     - 解凍後の実行ファイルのパス
   - .exeの場合
@@ -203,6 +206,11 @@ launcher/release.json
   - install.rs: ゲームのインストールに関連するコード
   - uninstall.rs: ゲームのアンインストールに関連するコード
   - update.rs: ゲームのアップデートに関連するコード
+- state/
+  - mod.rs
+  - app_state.rs: アプリケーションの状態管理に関連するコード(例: 現在表示している画面の状態など)
+  - game_state.rs: ゲームの状態管理に関連するコード(例: ゲームの起動状態など)
+  - ...後で追加
 - utils/: その他のユーティリティコード
   - mod.rs
   - file.rs: ファイル操作に関連するコード(例: ファイルのダウンロードや解凍など)
