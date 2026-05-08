@@ -3,10 +3,6 @@
 version = 4
 
 [[package]]
-<<<<<<< HEAD
-name = "kazane_game_launcher"
-version = "0.1.0"
-=======
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6536,4 +6532,3 @@ dependencies = [
  "syn",
  "winnow",
 ]
->>>>>>> start
