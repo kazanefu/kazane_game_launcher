@@ -43,7 +43,7 @@ Kazane Game Launcherはkazane(私)が開発したゲームを検索/インスト
 
 ## データ構造
 
-### ローカル(loacl/game_data.json, launcher/settings.json, games/)(初回起動時に生成)
+### ローカル (local/game_data.json, launcher/settings.json, games/) (初回起動時に生成)
 
 注: ランチャーの実行ファイルからの相対パスで記載
 
@@ -221,3 +221,109 @@ launcher/release.json
   - mod.rs
   - file.rs: ファイル操作に関連するコード(例: ファイルのダウンロードや解凍など)
   - ...後で追加
+
+## 付録: 追加仕様とサンプル
+以下は設計に追記・明確化した項目です。セキュリティ、信頼性、UI/運用面、テスト、Windows固有挙動などを扱います。
+
+### JSON スキーマ(例)
+- data/game_list.json (リポジトリルート)
+```json
+{
+  "games": [
+    {
+      "id": "sample-game",
+      "name": "Sample Game",
+      "repo": "https://github.com/owner/sample-game",
+      "description": "短い説明(オプション)",
+      "tags": ["puzzle", "arcade"]
+    }
+  ]
+}
+```
+
+- launcher/release.json (各ゲームのリポジトリルート)
+```json
+{
+  "latest": {
+    "version": "1.2.3",
+    "assets": [
+      {
+        "name": "sample-game-win.zip",
+        "url": "https://github.com/owner/sample-game/releases/download/v1.2.3/sample-game-win.zip",
+        "type": "zip",
+        "sha256": "<hex-sha256>",
+        "entry_point": "sample-game.exe"
+      }
+    ],
+    "channel": "stable"
+  }
+}
+```
+
+- local/game_data.json (ランチャーローカル)
+```json
+{
+  "installed": [
+    {
+      "id": "sample-game",
+      "name": "Sample Game",
+      "version": "1.2.3",
+      "install_path": "C\\\\Games\\\\sample-game",
+      "repo": "https://github.com/owner/sample-game",
+      "installed": true,
+      "last_checked": "2026-05-08T00:00:00Z"
+    }
+  ]
+}
+```
+
+### ダウンロードの検証
+- 常にHTTPSを使用する。
+- release.jsonにsha256を含め、ダウンロード後にハッシュ検証を行う。
+- 将来的に署名(公開鍵)検証の導入を検討する。
+
+### インストールの原子性とロールバック
+- インストールは一時ディレクトリにダウンロード→検証→展開→最終インストール先へ原子的に移動(rename)する。
+- 失敗時は一時ディレクトリを削除して状態をロールバックし、local/game_data.jsonは成功時にのみ更新する。
+- 更新は一時ファイルで行い、最後にファイルロックを取得してlocal/game_data.jsonへ置換する。
+
+### 同期とファイルロック
+- local/game_data.jsonへのアクセスは排他ロックを使用(例: ファイルロックまたはアプリ内Mutex+ファイル単位の排他)する。
+- 外部で編集された場合の競合解決手順を設計(最終更新時刻の比較、ユーザーに選択肢を提示)
+
+### Windows 固有考慮事項
+- UACが必要な場所(Program Files等)へインストールする際は権限エラーをハンドリングし、ユーザーにインストール先変更を促す。
+- パスは常に\を使用し、パス結合には標準ライブラリ(API)を使う。
+- explorer起動はCommand::new("explorer").arg(path).spawn()だが、パス検証を厳密に行いコマンドインジェクションを防ぐ。
+- プロセス起動時はフルパスを指定し、引数や環境変数は適切にエスケープ/検証する。
+
+### エラー分類と再試行方針
+- recoverable: ネットワーク一時障害等 → 指数バックオフで最大N回リトライ。ユーザーにキャンセル可能にする。
+- fatal: ファイルシステムの恒久的エラー等 → 明確なメッセージと復旧手順を提示。
+
+### UI/UX の追加仕様
+- ダウンロード/展開中の進捗バーと速度表示
+- キャンセルボタン（押下時はダウンロード停止と一時ファイルのクリーンアップ）
+- 操作ログ出力(ユーザーフレンドリな操作履歴)と詳細ログ(問題時の診断用)
+- 通知(トースト)の仕様: 成功/失敗/完了/中断
+
+### セキュリティ対策
+- 入力されたパスやURLは正規化・検証してディレクトリ横移動などを防ぐ。
+- 外部コマンドを通す処理は最小限にし、可能な限り標準APIを利用して直接プロセスを起動する。
+- ダウンロード元は信頼できるURLのみを許可(リポジトリのrelease.json経由)
+
+### テスト/CI
+- ユニットテスト: JSONパーサ、ハッシュ検証、パス正規化など
+- 統合テスト: 一時ディレクトリを使ったインストールフローのエンドツーエンドテスト
+- CI: push/PRでcargo testを実行、clippy/formatチェックを含める
+
+### バージョニングとアップデート戦略
+- release.jsonにversionとsha256を含め、既存バージョンと比較して差分(パッチ)配布かフル配布かを判断する。
+- ランチャー自身の更新は自己更新/外部アップデータどちらかを検討。自動更新はユーザー承認を求める。
+
+### ドキュメント
+- シーケンス図(install/update/launch)とJSONスキーマをdocs/に追加する。
+- design.mdにサンプルと要点を追記済み。詳細なフローはdocs/下に分割して保持する予定。
+
+---
+(この付録は設計を実装に移す前の追加仕様であり、必要に応じてさらに細分化して実装チケットに落とし込みます。)
