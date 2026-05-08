@@ -1,0 +1,10 @@
+{
+  "games": [
+    {
+      "id": "sample-game",
+      "name": "Sample Game",
+      "repo": "https://github.com/kazanefu/sample-game",
+      "description": "dummy"
+    }
+  ]
+}
