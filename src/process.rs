@@ -44,7 +44,7 @@ impl ProcessManager {
             cmd.args(args);
         }
         // On Windows, ensure creation of a child process that we can kill.
-        let mut child = cmd.spawn()?;
+        let child = cmd.spawn()?;
         let pid = child.id().unwrap_or(0);
         let start_time = SystemTime::now();
 
@@ -119,5 +119,11 @@ impl ProcessManager {
             pid,
             start_time: e.start_time,
         }))
+    }
+}
+
+impl Default for ProcessManager {
+    fn default() -> Self {
+        Self::new()
     }
 }

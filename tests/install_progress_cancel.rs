@@ -7,13 +7,13 @@ use tokio::sync::{mpsc, watch};
 async fn test_progress_events_during_install() {
     let provider = GitHubRawProvider::new(None);
     let (tx, mut rx) = mpsc::channel::<Progress>(16);
-    let (cancel_tx, cancel_rx) = watch::channel(false);
+    let (_cancel_tx, cancel_rx) = watch::channel(false);
     let game_data = std::path::Path::new("local").join("game_data.json");
-    let games_dir = std::path::Path::new("games");
+    let games_dir = std::path::PathBuf::from("games");
 
     // run install in background
     let handle = tokio::spawn(async move {
-        let res = install_from_repo(
+        install_from_repo(
             &provider,
             "kazanefu",
             "zip_sample_game",
@@ -22,8 +22,7 @@ async fn test_progress_events_during_install() {
             Some(tx),
             Some(cancel_rx),
         )
-        .await;
-        res
+        .await
     });
 
     // collect some progress events
@@ -54,10 +53,10 @@ async fn test_cancel_install() {
     let (tx, mut rx) = mpsc::channel::<Progress>(16);
     let (cancel_tx, cancel_rx) = watch::channel(false);
     let game_data = std::path::Path::new("local").join("game_data.json");
-    let games_dir = std::path::Path::new("games");
+    let games_dir = std::path::PathBuf::from("games");
 
     let handle = tokio::spawn(async move {
-        let res = install_from_repo(
+        install_from_repo(
             &provider,
             "kazanefu",
             "zip_sample_game",
@@ -66,8 +65,7 @@ async fn test_cancel_install() {
             Some(tx),
             Some(cancel_rx),
         )
-        .await;
-        res
+        .await
     });
 
     // wait for first progress

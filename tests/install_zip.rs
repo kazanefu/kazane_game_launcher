@@ -1,7 +1,6 @@
 use kazane_game_launcher::data::remote::provider::GitHubRawProvider;
 use kazane_game_launcher::installer::install::install_from_repo;
 use std::path::Path;
-use tempfile::tempdir;
 
 #[tokio::test]
 async fn test_install_zip_sample_game() {
@@ -24,10 +23,9 @@ async fn test_install_zip_sample_game() {
     assert!(p.exists());
     // check for an exe or other expected file
     let mut found_any = false;
-    for entry in std::fs::read_dir(p).unwrap() {
+    if let Some(entry) = std::fs::read_dir(p).unwrap().next() {
         let _e = entry.unwrap();
         found_any = true;
-        break;
     }
     assert!(found_any, "no files extracted");
 }

@@ -1,7 +1,6 @@
 use kazane_game_launcher::data::remote::provider::GitHubRawProvider;
 use kazane_game_launcher::installer::install::install_from_repo;
 use std::path::Path;
-use tempfile::tempdir;
 
 #[tokio::test]
 async fn test_install_exe_sample_game() {
@@ -28,11 +27,9 @@ async fn test_install_exe_sample_game() {
     let mut found = false;
     for entry in std::fs::read_dir(p).unwrap() {
         let e = entry.unwrap();
-        if let Some(ext) = e.path().extension() {
-            if ext == "exe" {
-                found = true;
-                break;
-            }
+        if e.path().extension().map(|ext| ext == "exe").unwrap_or(false) {
+            found = true;
+            break;
         }
     }
     assert!(found, "exe not found in installed dir");
