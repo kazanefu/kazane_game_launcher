@@ -4,6 +4,7 @@ mod state;
 mod utils;
 
 use data::local::{LocalGameData, Settings};
+use data::remote::provider::{GitHubRawProvider, RemoteProvider};
 use state::AppState;
 use std::path::PathBuf;
 
@@ -28,6 +29,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Settings: {:?}", settings);
     println!("Installed games: {}", _app_state.local.installed.len());
+
+    // CLI: fetch game list from a GitHub repo
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "fetch-games" {
+        // usage: fetch-games owner/repo
+        if let Some(repo_spec) = args.get(2) {
+            if let Some((owner, repo)) = repo_spec.split_once('/') {
+                let provider = GitHubRawProvider::new(None);
+                match provider.fetch_game_list(owner, repo).await {
+                    Ok(list) => {
+                        println!("Fetched {} games:", list.games.len());
+                        for g in list.games {
+                            println!("- {} ({})", g.name, g.id);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to fetch game list: {}", e);
+                    }
+                }
+            } else {
+                eprintln!("repo must be owner/repo");
+            }
+        }
+    }
 
     Ok(())
 }
