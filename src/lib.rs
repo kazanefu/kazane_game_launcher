@@ -3,6 +3,7 @@ pub mod installer;
 pub mod state;
 pub mod utils;
 pub mod process;
+pub mod api;
 
 use data::local::{LocalGameData, Settings};
 use data::remote::provider::{GitHubRawProvider, RemoteProvider};
