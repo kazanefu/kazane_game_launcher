@@ -34,4 +34,12 @@ impl LocalGameData {
     pub fn find(&self, id: &str) -> Option<&InstalledGame> {
         self.installed.iter().find(|g| g.id == id)
     }
+
+    pub fn add_or_update(&mut self, game: InstalledGame) {
+        if let Some(existing) = self.installed.iter_mut().find(|g| g.id == game.id) {
+            *existing = game;
+        } else {
+            self.installed.push(game);
+        }
+    }
 }

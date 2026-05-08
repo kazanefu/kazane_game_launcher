@@ -16,10 +16,22 @@ pub async fn install_from_repo<P: super::super::data::remote::provider::RemotePr
     owner: &str,
     repo: &str,
     dest_dir: &Path,
+    game_data_path: &Path,
 ) -> Result<InstalledGame, Box<dyn Error>> {
     // Fetch release info
     let release = provider.fetch_release(owner, repo).await?;
-    install_from_release_info(&release, owner, repo, dest_dir).await
+    let installed = install_from_release_info(&release, owner, repo, dest_dir).await?;
+
+    // update local/game_data.json
+    // ensure parent dir exists
+    if let Some(parent) = game_data_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut local_data = crate::data::local::LocalGameData::load(game_data_path)?;
+    local_data.add_or_update(installed.clone());
+    local_data.save_atomic(game_data_path)?;
+
+    Ok(installed)
 }
 
 async fn install_from_release_info(
