@@ -1,0 +1,16 @@
+{
+  "games": [
+    {
+      "id": "exe-sample",
+      "name": "Exe Sample Game",
+      "repo": "https://github.com/kazanefu/exe_sample_game",
+      "description": "exe distribution for tests"
+    },
+    {
+      "id": "zip-sample",
+      "name": "Zip Sample Game",
+      "repo": "https://github.com/kazanefu/zip_sample_game",
+      "description": "zip distribution for tests"
+    }
+  ]
+}

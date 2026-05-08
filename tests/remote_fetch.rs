@@ -1,0 +1,14 @@
+use kazane_game_launcher::data::RemoteProvider;
+use kazane_game_launcher::data::remote::provider::GitHubRawProvider;
+
+#[tokio::test]
+async fn test_fetch_game_list_from_github_workspace() {
+    let provider = GitHubRawProvider::new(Some("workspace"));
+    let list = provider
+        .fetch_game_list("kazanefu", "kazane_game_launcher")
+        .await
+        .expect("fetch");
+    assert!(!list.games.is_empty());
+    assert_eq!(list.games[0].id, "exe-sample");
+    assert_eq!(list.games[1].id, "zip-sample");
+}
