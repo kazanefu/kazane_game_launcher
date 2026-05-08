@@ -1,4 +1,5 @@
 use kazane_game_launcher::data::remote::provider::GitHubRawProvider;
+use kazane_game_launcher::data::RemoteProvider;
 
 #[tokio::test]
 async fn test_fetch_game_list_from_github_workspace() {
