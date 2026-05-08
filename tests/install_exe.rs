@@ -16,6 +16,8 @@ async fn test_install_exe_sample_game() {
         "exe_sample_game",
         &games_dir,
         &game_data,
+        None,
+        None,
     )
     .await
     .expect("install exe");

@@ -27,7 +27,7 @@ impl GitHubRawProvider {
         owner: &str,
         repo: &str,
         path: &str,
-    ) -> Result<T, Box<dyn Error>> {
+    ) -> Result<T, Box<dyn Error + Send + Sync>> {
         let raw_url = format!(
             "https://raw.githubusercontent.com/{}/{}/{}/{}",
             owner,
@@ -106,17 +106,33 @@ impl GitHubRawProvider {
 
 #[async_trait]
 pub trait RemoteProvider: Send + Sync + 'static {
-    async fn fetch_game_list(&self, owner: &str, repo: &str) -> Result<GameList, Box<dyn Error>>;
-    async fn fetch_release(&self, owner: &str, repo: &str) -> Result<ReleaseList, Box<dyn Error>>;
+    async fn fetch_game_list(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<GameList, Box<dyn Error + Send + Sync>>;
+    async fn fetch_release(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<ReleaseList, Box<dyn Error + Send + Sync>>;
 }
 
 #[async_trait]
 impl RemoteProvider for GitHubRawProvider {
-    async fn fetch_game_list(&self, owner: &str, repo: &str) -> Result<GameList, Box<dyn Error>> {
+    async fn fetch_game_list(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<GameList, Box<dyn Error + Send + Sync>> {
         self.get_json(owner, repo, "data/game_list.json").await
     }
 
-    async fn fetch_release(&self, owner: &str, repo: &str) -> Result<ReleaseList, Box<dyn Error>> {
+    async fn fetch_release(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<ReleaseList, Box<dyn Error + Send + Sync>> {
         self.get_json(owner, repo, "launcher/release.json").await
     }
 }

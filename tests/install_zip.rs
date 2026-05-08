@@ -15,6 +15,8 @@ async fn test_install_zip_sample_game() {
         "zip_sample_game",
         &games_dir,
         &game_data,
+        None,
+        None,
     )
     .await
     .expect("install zip");

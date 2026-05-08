@@ -18,7 +18,7 @@ pub struct LocalGameData {
 }
 
 impl LocalGameData {
-    pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         if !path.exists() {
             return Ok(LocalGameData::default());
         }
@@ -27,7 +27,7 @@ impl LocalGameData {
         Ok(v)
     }
 
-    pub fn save_atomic(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save_atomic(&self, path: &Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         crate::utils::file::write_json_atomic(path, self)
     }
 

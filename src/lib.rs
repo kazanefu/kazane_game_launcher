@@ -7,7 +7,9 @@ use data::local::{LocalGameData, Settings};
 use data::remote::provider::{GitHubRawProvider, RemoteProvider};
 use std::path::PathBuf;
 
-pub async fn run_from_args(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run_from_args(
+    args: Vec<String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let exe_dir = std::env::current_exe()?
         .parent()
         .map(|p| p.to_path_buf())
