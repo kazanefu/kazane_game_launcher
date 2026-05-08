@@ -1,6 +1,6 @@
-use crate::data::remote::ReleaseList;
 use crate::data::local::InstalledGame;
 use crate::data::remote::ReleaseAsset;
+use crate::data::remote::ReleaseList;
 use async_trait::async_trait;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
@@ -60,10 +60,17 @@ async fn install_from_release_info(
             let actual = hasher.finalize();
             let actual_hex = hex::encode(actual);
             if actual_hex != expected_tr.to_lowercase() {
-                return Err(format!("sha256 mismatch: expected {} got {}", expected_tr, actual_hex).into());
+                return Err(format!(
+                    "sha256 mismatch: expected {} got {}",
+                    expected_tr, actual_hex
+                )
+                .into());
             }
         } else {
-            eprintln!("Warning: skipping sha256 verification because value looks invalid or placeholder: {}", expected_hex);
+            eprintln!(
+                "Warning: skipping sha256 verification because value looks invalid or placeholder: {}",
+                expected_hex
+            );
         }
     }
 

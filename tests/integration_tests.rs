@@ -1,5 +1,5 @@
-use tempfile::tempdir;
 use std::path::PathBuf;
+use tempfile::tempdir;
 
 #[test]
 fn test_settings_default_load() {
@@ -24,7 +24,8 @@ fn test_write_and_read_json_atomic() {
     let path = dir.path().join("settings.json");
     let s = kazane_game_launcher::data::local::Settings::default();
     kazane_game_launcher::utils::file::write_json_atomic(&path, &s).unwrap();
-    let s2: kazane_game_launcher::data::local::Settings = kazane_game_launcher::utils::file::read_json(&path).unwrap();
+    let s2: kazane_game_launcher::data::local::Settings =
+        kazane_game_launcher::utils::file::read_json(&path).unwrap();
     assert_eq!(s.install_dir, s2.install_dir);
     assert_eq!(s.theme, s2.theme);
 }

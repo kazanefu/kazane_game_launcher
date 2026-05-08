@@ -1,14 +1,17 @@
 pub mod data;
-pub mod utils;
 pub mod installer;
 pub mod state;
+pub mod utils;
 
-use data::local::{Settings, LocalGameData};
+use data::local::{LocalGameData, Settings};
 use data::remote::provider::{GitHubRawProvider, RemoteProvider};
 use std::path::PathBuf;
 
 pub async fn run_from_args(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    let exe_dir = std::env::current_exe()?.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
+    let exe_dir = std::env::current_exe()?
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
     let launcher_dir = exe_dir.join("launcher");
     let local_dir = exe_dir.join("local");
     let settings_path = launcher_dir.join("settings.json");
@@ -30,7 +33,9 @@ pub async fn run_from_args(args: Vec<String>) -> Result<(), Box<dyn std::error::
                 let provider = GitHubRawProvider::new(None);
                 let list = provider.fetch_game_list(owner, repo).await?;
                 println!("Fetched {} games:", list.games.len());
-                for g in list.games { println!("- {} ({})", g.name, g.id); }
+                for g in list.games {
+                    println!("- {} ({})", g.name, g.id);
+                }
             } else {
                 eprintln!("repo must be owner/repo");
             }

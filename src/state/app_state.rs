@@ -1,5 +1,5 @@
-use crate::data::local::Settings;
 use crate::data::local::LocalGameData;
+use crate::data::local::Settings;
 
 pub struct AppState {
     pub settings: Settings,
