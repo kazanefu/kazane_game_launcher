@@ -1,11 +1,9 @@
 use crate::data::local::InstalledGame;
 use crate::data::remote::{ReleaseAsset, ReleaseList};
-use futures_util::StreamExt;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::error::Error;
 use std::fs;
-use std::io::Read;
 use std::path::Path;
 use tempfile::tempdir;
 use tokio::sync::{mpsc, watch};
@@ -54,7 +52,7 @@ pub async fn install_from_repo<
     dest_dir: &Path,
     game_data_path: &Path,
     mut progress_tx: Option<ProgressSender>,
-    mut cancel_rx: Option<watch::Receiver<bool>>,
+    cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<InstalledGame, Box<dyn Error + Send + Sync>> {
     let release = provider.fetch_release(owner, repo).await?;
     let installed = install_from_release_info(
@@ -111,9 +109,9 @@ async fn install_from_release_info(
     let asset = release
         .latest
         .assets
-        .get(0)
-        .ok_or(InstallError::Other("no assets in release".to_string()))?
-        .clone();
+        .first()
+        .cloned()
+        .ok_or(InstallError::Other("no assets in release".to_string()))?;
 
     // Download asset with progress & cancellation
     if let Some(tx) = progress_tx {
@@ -183,7 +181,7 @@ async fn install_from_release_info(
                 .by_index(i)
                 .map_err(|e| InstallError::Other(e.to_string()))?;
             let outpath = match file.enclosed_name() {
-                Some(p) => extract_dir.join(p.to_owned()),
+                Some(p) => extract_dir.join(p),
                 None => continue,
             };
             if file.name().ends_with('/') {
@@ -200,10 +198,10 @@ async fn install_from_release_info(
                     .map_err(|e| InstallError::Other(e.to_string()))?;
             }
             // check cancellation
-            if let Some(rx) = cancel_rx {
-                if *rx.borrow() {
-                    return Err(InstallError::Cancelled);
-                }
+            if let Some(rx) = cancel_rx
+                && *rx.borrow()
+            {
+                return Err(InstallError::Cancelled);
             }
         }
         if final_root.exists() {
@@ -284,8 +282,7 @@ async fn download_asset_with_progress(
         .get(&asset.url)
         .send()
         .await
-        .map_err(|e| InstallError::Other(e.to_string()))
-        .map_err(|e| e)?;
+        .map_err(|e| InstallError::Other(e.to_string()))?;
     if !resp.status().is_success() {
         return Err(InstallError::Other(format!(
             "HTTP error {} fetching {}",
@@ -301,10 +298,10 @@ async fn download_asset_with_progress(
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| InstallError::Other(e.to_string()))?;
         // cancellation check
-        if let Some(rx) = cancel_rx {
-            if *rx.borrow() {
-                return Err(InstallError::Cancelled);
-            }
+        if let Some(rx) = cancel_rx
+            && *rx.borrow()
+        {
+            return Err(InstallError::Cancelled);
         }
         downloaded += chunk.len() as u64;
         buf.extend_from_slice(&chunk);

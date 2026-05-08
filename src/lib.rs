@@ -1,5 +1,6 @@
 pub mod data;
 pub mod installer;
+pub mod process;
 pub mod state;
 pub mod utils;
 
@@ -29,19 +30,17 @@ pub async fn run_from_args(
     println!("Installed games: {}", local.installed.len());
 
     // CLI hook: fetch-games owner/repo
-    if args.len() >= 3 && args[1] == "fetch-games" {
-        if let Some(repo_spec) = args.get(2) {
-            if let Some((owner, repo)) = repo_spec.split_once('/') {
-                let provider = GitHubRawProvider::new(None);
-                let list = provider.fetch_game_list(owner, repo).await?;
-                println!("Fetched {} games:", list.games.len());
-                for g in list.games {
-                    println!("- {} ({})", g.name, g.id);
-                }
-            } else {
-                eprintln!("repo must be owner/repo");
+    if args.len() >= 3 && args[1] == "fetch-games"
+        && let Some(repo_spec) = args.get(2)
+        && let Some((owner, repo)) = repo_spec.split_once('/') {
+            let provider = GitHubRawProvider::new(None);
+            let list = provider.fetch_game_list(owner, repo).await?;
+            println!("Fetched {} games:", list.games.len());
+            for g in list.games {
+                println!("- {} ({})", g.name, g.id);
             }
-        }
+    } else if args.len() >= 3 && args[1] == "fetch-games" {
+        eprintln!("repo must be owner/repo");
     }
 
     Ok(())
