@@ -4,10 +4,16 @@ pub mod process;
 pub mod state;
 pub mod utils;
 
+#[cfg(not(test))]
+pub mod gui;
+
 use data::local::{LocalGameData, Settings};
 use data::remote::provider::{GitHubRawProvider, RemoteProvider};
 use state::AppState;
 use std::path::PathBuf;
+
+#[cfg(not(test))]
+pub use gui::run_gui;
 
 pub async fn run_from_args(
     args: Vec<String>,
