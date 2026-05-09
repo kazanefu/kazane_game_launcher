@@ -205,7 +205,45 @@ async fn install_from_release_info(
             }
         }
         if final_root.exists() {
-            std::fs::remove_dir_all(&final_root).map_err(|e| InstallError::Other(e.to_string()))?;
+            // attempt to remove readonly flags then remove; if that fails, try to rename old dir out of the way
+            fn clear_readonly_recursive(path: &Path) -> std::io::Result<()> {
+                if !path.exists() { return Ok(()); }
+                if path.is_file() {
+                    let mut perms = path.metadata()?.permissions();
+                    perms.set_readonly(false);
+                    std::fs::set_permissions(path, perms)?;
+                    return Ok(());
+                }
+                for entry in std::fs::read_dir(path)? {
+                    let entry = entry?;
+                    let p = entry.path();
+                    if p.is_dir() {
+                        clear_readonly_recursive(&p)?;
+                        let mut perms = p.metadata()?.permissions();
+                        perms.set_readonly(false);
+                        std::fs::set_permissions(&p, perms)?;
+                    } else {
+                        let mut perms = p.metadata()?.permissions();
+                        perms.set_readonly(false);
+                        std::fs::set_permissions(&p, perms)?;
+                    }
+                }
+                Ok(())
+            }
+            if let Err(e) = clear_readonly_recursive(&final_root) {
+                eprintln!("warning: failed to clear readonly on {}: {}", final_root.display(), e);
+            }
+            if let Err(e) = std::fs::remove_dir_all(&final_root) {
+                eprintln!("warning: failed to remove existing dir {}: {}", final_root.display(), e);
+                // try to rename old dir as fallback
+                let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                let backup = final_root.with_extension(format!("old-{}", ts));
+                if let Err(e2) = std::fs::rename(&final_root, &backup) {
+                    return Err(InstallError::Other(format!("failed to remove or rename existing install dir {}: {}", final_root.display(), e)));
+                } else {
+                    eprintln!("renamed existing {} -> {}", final_root.display(), backup.display());
+                }
+            }
         }
         let entries: Vec<_> = std::fs::read_dir(&extract_dir)
             .map_err(|e| InstallError::Other(e.to_string()))?
