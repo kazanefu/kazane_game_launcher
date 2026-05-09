@@ -29,12 +29,20 @@ pub fn read_json<T: for<'de> serde::Deserialize<'de>>(
 }
 
 /// Open (and create if missing) a lock file alongside the target path and lock it.
-fn open_lock_file(path: &Path, exclusive: bool) -> Result<fs::File, Box<dyn std::error::Error + Send + Sync>> {
+fn open_lock_file(
+    path: &Path,
+    exclusive: bool,
+) -> Result<fs::File, Box<dyn std::error::Error + Send + Sync>> {
     let lock_path = path.with_extension("lock");
     if let Some(parent) = lock_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let f = fs::OpenOptions::new().read(true).write(true).create(true).open(&lock_path)?;
+    let f = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&lock_path)?;
     if exclusive {
         f.lock_exclusive()?;
     } else {
