@@ -64,13 +64,26 @@ where
         let mut local = LocalGameData::load(&self.game_data_path)?;
         if let Some(pos) = local.installed.iter().position(|g| g.id == id) {
             let entry = local.installed.remove(pos);
-            // remove files
+            // Try to remove explicit exe_path if present
+            if let Some(exe) = entry.exe_path.as_ref() {
+                let pexe = Path::new(exe);
+                if pexe.exists() {
+                    let _ = std::fs::remove_file(pexe);
+                }
+            }
+            // remove install_path (may be dir or file)
             let p = Path::new(&entry.install_path);
             if p.exists() {
                 if p.is_dir() {
                     std::fs::remove_dir_all(p)?;
                 } else {
                     std::fs::remove_file(p)?;
+                }
+            }
+            // as a fallback, if install_path was a file inside a dir, try removing parent if empty
+            if let Some(parent) = p.parent() {
+                if parent.exists() {
+                    let _ = std::fs::remove_dir(parent);
                 }
             }
             local.save_atomic(&self.game_data_path)?;

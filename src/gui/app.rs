@@ -11,6 +11,7 @@ pub struct LauncherGui {
     status: String,
     show_logs: bool,
     current_view: ViewMode,
+    last_log: Option<String>,
 }
 
 
@@ -22,7 +23,7 @@ enum ViewMode {
 
 impl LauncherGui {
     pub fn new(app_state: Arc<AppState>) -> Self {
-        Self { app_state, search_query: String::new(), tag_query: String::new(), results: Vec::new(), status: String::new(), show_logs: false, current_view: ViewMode::Library }
+        Self { app_state, search_query: String::new(), tag_query: String::new(), results: Vec::new(), status: String::new(), show_logs: false, current_view: ViewMode::Library, last_log: None }
     }
 
     fn perform_search_with_tags(&mut self, query: &str, tags: Option<&[&str]>) {
@@ -58,6 +59,23 @@ impl LauncherGui {
 impl eframe::App for LauncherGui {
     // Use the newer ui method to avoid deprecated update warnings
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // apply theme each frame to ensure eframe doesn't override it
+        let ctx = ui.ctx();
+        if self.app_state.settings.theme.to_lowercase() == "dark" {
+            ctx.set_visuals(egui::Visuals::dark());
+        } else {
+            ctx.set_visuals(egui::Visuals::light());
+        }
+        // update status from latest log so UI reflects completion promptly
+        let logs = self.app_state.get_logs();
+        if let Some(latest) = logs.last() {
+            if self.last_log.as_deref() != Some(latest.as_str()) {
+                // show concise last log message in status
+                self.status = latest.clone();
+                self.last_log = Some(latest.clone());
+            }
+        }
+
         // use the provided Ui as parent for show_inside
         // simple view selector
         egui::Panel::top("top_panel").show_inside(ui, |ui| {

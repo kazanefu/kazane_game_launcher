@@ -49,79 +49,71 @@ impl ProcessManager {
         // debug
         eprintln!("ProcessManager::start - exe_path={:?} args={:?}", exe_path, args);
 
-        // Build command. On Windows, if exe_path looks like a bare program name (no separators), build with string to let PATH lookup work.
-        let mut use_prog_str = false;
+        // Build command. On Windows, try to spawn with a new console for .exe so console games show a window and keep running.
+        #[cfg(windows)]
+        let mut maybe_child: Option<tokio::process::Child> = None;
+
         #[cfg(windows)]
         {
-            let s = exe_path.to_string_lossy();
-            if !s.contains('\\') && !s.contains('/') {
-                use_prog_str = true;
+            use std::os::windows::process::CommandExt;
+            // If an .exe is provided, prefer creating a new console so console games are visible
+            if exe_path.extension().and_then(|s| s.to_str()).map(|s| s.eq_ignore_ascii_case("exe")).unwrap_or(false) {
+                let mut std_cmd = std::process::Command::new(&exe_path);
+                if !args.is_empty() { std_cmd.args(args); }
+                if let Some(parent) = exe_path.parent() { std_cmd.current_dir(parent); }
+                // CREATE_NEW_CONSOLE = 0x00000010
+                std_cmd.creation_flags(0x00000010);
+                match tokio::process::Command::from(std_cmd).spawn() {
+                    Ok(c) => {
+                        maybe_child = Some(c);
+                    }
+                    Err(e) => {
+                        eprintln!("failed to spawn with CREATE_NEW_CONSOLE: {}", e);
+                    }
+                }
             }
         }
 
-        let mut cmd = if use_prog_str {
-            // On Windows, prefer running through cmd.exe /C to ensure PATH programs are resolved
-            #[cfg(windows)]
-            {
-                let prog = exe_path.file_name()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| exe_path.to_string_lossy().into_owned());
-                let mut c = tokio::process::Command::new("cmd");
-                let mut all_args = vec!["/C".to_string(), prog.clone()];
-                for a in args { all_args.push(a.clone()); }
-                eprintln!("Spawning via cmd.exe with args: {:?}", all_args);
-                c.args(all_args);
+        // If Windows spawn with new console didn't work or not on Windows, fall back to building a normal command
+        let child = if cfg!(windows) {
+            if let Some(c) = maybe_child {
                 c
-            }
-            #[cfg(not(windows))]
-            {
-                let prog = exe_path.file_name()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| exe_path.to_string_lossy().into_owned());
-                let mut c = tokio::process::Command::new(prog);
-                if !args.is_empty() { c.args(args); }
-                c
+            } else {
+                // fallback: if bare program name, use cmd /C to resolve PATH, else spawn directly
+                let mut use_prog_str = false;
+                #[cfg(windows)]
+                {
+                    let s = exe_path.to_string_lossy();
+                    if !s.contains('\\') && !s.contains('/') {
+                        use_prog_str = true;
+                    }
+                }
+                let mut cmd = if use_prog_str {
+                    let prog = exe_path.file_name()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| exe_path.to_string_lossy().into_owned());
+                    let mut c = tokio::process::Command::new("cmd");
+                    let mut all_args = vec!["/C".to_string(), prog.clone()];
+                    for a in args { all_args.push(a.clone()); }
+                    c.args(all_args);
+                    c
+                } else {
+                    let mut c = tokio::process::Command::new(&exe_path);
+                    if !args.is_empty() { c.args(args); }
+                    if let Some(parent) = exe_path.parent() { c.current_dir(parent); }
+                    c
+                };
+                cmd.spawn()?
             }
         } else {
-            let mut c = tokio::process::Command::new(&exe_path);
-            if !args.is_empty() { c.args(args); }
-            if let Some(parent) = exe_path.parent() { c.current_dir(parent); }
-            c
+            // non-windows
+            let mut cmd = tokio::process::Command::new(&exe_path);
+            if !args.is_empty() { cmd.args(args); }
+            if let Some(parent) = exe_path.parent() { cmd.current_dir(parent); }
+            cmd.spawn()?
         };
 
-        // If we didn't set current_dir above (bare program), still attempt not to set it.
-
-        // Spawn with a fallback for Windows when a bare program name causes ERROR_INVALID_NAME
-        let child_result = cmd.spawn();
-        let child = match child_result {
-            Ok(c) => c,
-            Err(e) => {
-                if let Some(code) = e.raw_os_error() {
-                    // 123 is ERROR_INVALID_NAME on Windows; try spawning using the program name as a string
-                    if code == 123 {
-                        // rebuild command using program as string
-                        let prog = exe_path.file_name()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| exe_path.to_string_lossy().into_owned());
-                        let mut cmd2 = tokio::process::Command::new(prog);
-                        if !args.is_empty() {
-                            cmd2.args(args);
-                        }
-                        if let Some(parent) = exe_path.parent() {
-                            cmd2.current_dir(parent);
-                        }
-                        cmd2.spawn()?
-                    } else {
-                        return Err(e.into());
-                    }
-                } else {
-                    return Err(e.into());
-                }
-            }
-        };
 
         let pid = child.id().unwrap_or(0);
         let start_time = SystemTime::now();
