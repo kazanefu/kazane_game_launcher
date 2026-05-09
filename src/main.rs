@@ -6,7 +6,8 @@ fn main() {
     if args.len() == 1 || args.iter().any(|a| a == "gui") {
         // create app state and run GUI synchronously
         if let Err(e) = kazane_game_launcher::run_gui({
-            let exe_dir = std::env::current_exe().ok()
+            let exe_dir = std::env::current_exe()
+                .ok()
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| PathBuf::from("."));
             let launcher_dir = exe_dir.join("launcher");
@@ -32,13 +33,23 @@ fn main() {
             }
             std::fs::create_dir_all(&launcher_dir).ok();
             std::fs::create_dir_all(&local_dir).ok();
-            let settings = kazane_game_launcher::data::local::Settings::load(&settings_path).unwrap_or_default();
+            let settings = kazane_game_launcher::data::local::Settings::load(&settings_path)
+                .unwrap_or_default();
             // If settings file didn't exist, save defaults to create it
             if !settings_path.exists() {
                 let _ = settings.save_atomic(&settings_path);
             }
-            let local = kazane_game_launcher::data::local::LocalGameData::load(&game_data_path).unwrap_or_default();
-            kazane_game_launcher::state::AppState::new(settings.clone(), local, exe_dir.join(&settings.install_dir), game_data_path, game_list_path, None).shared()
+            let local = kazane_game_launcher::data::local::LocalGameData::load(&game_data_path)
+                .unwrap_or_default();
+            kazane_game_launcher::state::AppState::new(
+                settings.clone(),
+                local,
+                exe_dir.join(&settings.install_dir),
+                game_data_path,
+                game_list_path,
+                None,
+            )
+            .shared()
         }) {
             eprintln!("GUI error: {}", e);
         }

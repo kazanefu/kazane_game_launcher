@@ -9,7 +9,6 @@ pub struct LauncherGui {
     tag_query: String,
     results: Vec<GameListEntry>,
     status: String,
-    #[allow(dead_code)]
     show_logs: bool,
     current_view: ViewMode,
     last_log: Option<String>,
