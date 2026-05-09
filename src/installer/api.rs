@@ -59,20 +59,84 @@ where
     }
 
     /// Uninstall by id (repo name). Removes install dir and removes from local game_data.json
+    fn clear_readonly_recursive(path: &Path) -> std::io::Result<()> {
+        if !path.exists() {
+            return Ok(());
+        }
+        if path.is_file() {
+            let mut perms = path.metadata()?.permissions();
+            perms.set_readonly(false);
+            std::fs::set_permissions(path, perms)?;
+            return Ok(());
+        }
+        // directory
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            let p = entry.path();
+            if p.is_dir() {
+                Self::clear_readonly_recursive(&p)?;
+                let mut perms = p.metadata()?.permissions();
+                perms.set_readonly(false);
+                std::fs::set_permissions(&p, perms)?;
+            } else {
+                let mut perms = p.metadata()?.permissions();
+                perms.set_readonly(false);
+                std::fs::set_permissions(&p, perms)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn try_remove_path(path: &Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if !path.exists() {
+            return Ok(());
+        }
+        // clear readonly flags recursively then attempt removal
+        if let Err(e) = Self::clear_readonly_recursive(path) {
+            // non-fatal: log via stderr and continue
+            eprintln!("warning: failed clearing readonly flags: {}", e);
+        }
+        if path.is_file() {
+            match std::fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Box::new(e)),
+            }
+        } else if path.is_dir() {
+            match std::fs::remove_dir_all(path) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Box::new(e)),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn uninstall_game_by_id(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // load local data
         let mut local = LocalGameData::load(&self.game_data_path)?;
         if let Some(pos) = local.installed.iter().position(|g| g.id == id) {
             let entry = local.installed.remove(pos);
-            // remove files
-            let p = Path::new(&entry.install_path);
-            if p.exists() {
-                if p.is_dir() {
-                    std::fs::remove_dir_all(p)?;
-                } else {
-                    std::fs::remove_file(p)?;
-                }
+            // Try to remove explicit exe_path if present
+            if let Some(exe) = entry.exe_path.as_ref() {
+                let pexe = Path::new(exe);
+                if pexe.exists()
+                    && let Err(e) = Self::try_remove_path(pexe) {
+                        eprintln!("failed to remove exe_path {}: {}", pexe.display(), e);
+                    }
             }
+            // remove install_path (may be dir or file)
+            let p = Path::new(&entry.install_path);
+            if p.exists()
+                && let Err(e) = Self::try_remove_path(p) {
+                    eprintln!("failed to remove install_path {}: {}", p.display(), e);
+                }
+            // as a fallback, if install_path was a file inside a dir, try removing parent if empty
+            if let Some(parent) = p.parent()
+                && parent.exists() {
+                    // clear readonly on parent then try remove if empty
+                    let _ = Self::clear_readonly_recursive(parent);
+                    let _ = std::fs::remove_dir(parent);
+                }
             local.save_atomic(&self.game_data_path)?;
             Ok(())
         } else {

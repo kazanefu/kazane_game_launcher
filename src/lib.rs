@@ -4,10 +4,19 @@ pub mod process;
 pub mod state;
 pub mod utils;
 
+pub mod gui;
+
 use data::local::{LocalGameData, Settings};
 use data::remote::provider::{GitHubRawProvider, RemoteProvider};
 use state::AppState;
 use std::path::PathBuf;
+
+pub use gui::run_gui;
+
+#[allow(dead_code)]
+fn run_gui_sync(app: AppState) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    run_gui(app.shared())
+}
 
 pub async fn run_from_args(
     args: Vec<String>,
@@ -30,22 +39,31 @@ pub async fn run_from_args(
 
     // Create AppState and share across app
     let games_dir = exe_dir.join(&settings.install_dir);
-    let app = AppState::new(settings.clone(), local.clone(), games_dir, game_data_path.clone(), game_list_path, None);
+    let app = AppState::new(
+        settings.clone(),
+        local.clone(),
+        games_dir,
+        game_data_path.clone(),
+        game_list_path,
+        None,
+    );
     let app = app.shared();
 
     println!("Settings: {:?}", app.settings);
     println!("Installed games: {}", app.local.installed.len());
 
     // CLI hook: fetch-games owner/repo
-    if args.len() >= 3 && args[1] == "fetch-games"
+    if args.len() >= 3
+        && args[1] == "fetch-games"
         && let Some(repo_spec) = args.get(2)
-        && let Some((owner, repo)) = repo_spec.split_once('/') {
-            let provider = GitHubRawProvider::new(None);
-            let list = provider.fetch_game_list(owner, repo).await?;
-            println!("Fetched {} games:", list.games.len());
-            for g in list.games {
-                println!("- {} ({})", g.name, g.id);
-            }
+        && let Some((owner, repo)) = repo_spec.split_once('/')
+    {
+        let provider = GitHubRawProvider::new(None);
+        let list = provider.fetch_game_list(owner, repo).await?;
+        println!("Fetched {} games:", list.games.len());
+        for g in list.games {
+            println!("- {} ({})", g.name, g.id);
+        }
     } else if args.len() >= 3 && args[1] == "fetch-games" {
         eprintln!("repo must be owner/repo");
     }
