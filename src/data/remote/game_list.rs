@@ -29,8 +29,8 @@ impl GameList {
                     let namem = g.name.to_lowercase();
                     matched = idm.contains(&q) || namem.contains(&q);
                 }
-                if matched {
-                    if let Some(ts) = tags {
+                if matched
+                    && let Some(ts) = tags {
                         // require all tags to exist (case-insensitive)
                         let entry_tags: Vec<String> = g.tags.iter().map(|t| t.to_lowercase()).collect();
                         for &t in ts.iter() {
@@ -39,7 +39,6 @@ impl GameList {
                             }
                         }
                     }
-                }
                 matched
             })
             .cloned()

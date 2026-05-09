@@ -119,27 +119,24 @@ where
             // Try to remove explicit exe_path if present
             if let Some(exe) = entry.exe_path.as_ref() {
                 let pexe = Path::new(exe);
-                if pexe.exists() {
-                    if let Err(e) = Self::try_remove_path(pexe) {
+                if pexe.exists()
+                    && let Err(e) = Self::try_remove_path(pexe) {
                         eprintln!("failed to remove exe_path {}: {}", pexe.display(), e);
                     }
-                }
             }
             // remove install_path (may be dir or file)
             let p = Path::new(&entry.install_path);
-            if p.exists() {
-                if let Err(e) = Self::try_remove_path(p) {
+            if p.exists()
+                && let Err(e) = Self::try_remove_path(p) {
                     eprintln!("failed to remove install_path {}: {}", p.display(), e);
                 }
-            }
             // as a fallback, if install_path was a file inside a dir, try removing parent if empty
-            if let Some(parent) = p.parent() {
-                if parent.exists() {
+            if let Some(parent) = p.parent()
+                && parent.exists() {
                     // clear readonly on parent then try remove if empty
                     let _ = Self::clear_readonly_recursive(parent);
                     let _ = std::fs::remove_dir(parent);
                 }
-            }
             local.save_atomic(&self.game_data_path)?;
             Ok(())
         } else {

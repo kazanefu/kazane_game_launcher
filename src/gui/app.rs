@@ -9,6 +9,7 @@ pub struct LauncherGui {
     tag_query: String,
     results: Vec<GameListEntry>,
     status: String,
+    #[allow(dead_code)]
     show_logs: bool,
     current_view: ViewMode,
     last_log: Option<String>,
@@ -53,7 +54,7 @@ impl LauncherGui {
                 // log error in detail and show friendly status
                 let msg = format!("search error for '{}': {}", query, e);
                 self.app_state.append_log("ERROR", &msg);
-                self.status = format!("Search failed (see runtime.log)");
+                self.status = "Search failed (see runtime.log)".to_string();
                 self.results.clear();
             }
         }
@@ -89,12 +90,12 @@ impl eframe::App for LauncherGui {
         }
         // update status from latest log so UI reflects completion promptly
         let logs = self.app_state.get_logs();
-        if let Some(latest) = logs.last() {
-            if self.last_log.as_deref() != Some(latest.as_str()) {
-                // show concise last log message in status
-                self.status = latest.clone();
-                self.last_log = Some(latest.clone());
-            }
+        if let Some(latest) = logs.last()
+            && self.last_log.as_deref() != Some(latest.as_str())
+        {
+            // show concise last log message in status
+            self.status = latest.clone();
+            self.last_log = Some(latest.clone());
         }
 
         // use the provided Ui as parent for show_inside
@@ -242,39 +243,38 @@ impl eframe::App for LauncherGui {
                                             self.status = format!("installed {}", entry.id);
                                         }
                                     } else {
-                                        if ui.button("Launch").clicked() {
-                                            if let Some(ig) = &installed {
-                                                let id = ig.id.clone();
-                                                let path =
-                                                    std::path::PathBuf::from(&ig.install_path);
-                                                let app = self.app_state.clone();
-                                                let id2 = id.clone();
-                                                let path2 = path.clone();
-                                                let app2 = app.clone();
-                                                self.status = "launching...".to_string();
-                                                std::thread::spawn(move || {
-                                                    let rt = tokio::runtime::Runtime::new()
-                                                        .expect("tokio");
-                                                    let res = rt.block_on(app2.start_game(
-                                                        &id2,
-                                                        path2.clone(),
-                                                        &[],
-                                                    ));
-                                                    match res {
-                                                        Ok(info) => app2.append_log(
-                                                            "INFO",
-                                                            &format!(
-                                                                "started {} pid={}",
-                                                                info.id, info.pid
-                                                            ),
+                                        if ui.button("Launch").clicked()
+                                            && let Some(ig) = &installed
+                                        {
+                                            let id = ig.id.clone();
+                                            let path = std::path::PathBuf::from(&ig.install_path);
+                                            let app = self.app_state.clone();
+                                            let id2 = id.clone();
+                                            let path2 = path.clone();
+                                            let app2 = app.clone();
+                                            self.status = "launching...".to_string();
+                                            std::thread::spawn(move || {
+                                                let rt =
+                                                    tokio::runtime::Runtime::new().expect("tokio");
+                                                let res = rt.block_on(app2.start_game(
+                                                    &id2,
+                                                    path2.clone(),
+                                                    &[],
+                                                ));
+                                                match res {
+                                                    Ok(info) => app2.append_log(
+                                                        "INFO",
+                                                        &format!(
+                                                            "started {} pid={}",
+                                                            info.id, info.pid
                                                         ),
-                                                        Err(e) => app2.append_log(
-                                                            "ERROR",
-                                                            &format!("start error {}: {}", id2, e),
-                                                        ),
-                                                    }
-                                                });
-                                            }
+                                                    ),
+                                                    Err(e) => app2.append_log(
+                                                        "ERROR",
+                                                        &format!("start error {}: {}", id2, e),
+                                                    ),
+                                                }
+                                            });
                                         }
                                         if ui.button("Uninstall").clicked() {
                                             let id = entry.id.clone();

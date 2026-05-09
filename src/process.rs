@@ -42,7 +42,7 @@ impl ProcessManager {
 
         // Resolve executable path if a directory was passed
         let exe_path = if exe.is_dir() {
-            resolve_executable_in_dir(&exe).ok_or(format!("no executable found in {}", exe.display()))?
+            resolve_executable_in_dir(exe.clone()).ok_or(format!("no executable found in {}", exe.display()))?
         } else {
             exe
         };
@@ -243,7 +243,7 @@ impl ProcessManager {
 }
 
 /// Search for an executable inside a directory (exe on Windows, executable-bit on Unix)
-fn resolve_executable_in_dir(dir: &PathBuf) -> Option<PathBuf> {
+fn resolve_executable_in_dir(dir: PathBuf) -> Option<PathBuf> {
     let mut stack = vec![dir.clone()];
     while let Some(p) = stack.pop() {
         if let Ok(rd) = std::fs::read_dir(&p) {
