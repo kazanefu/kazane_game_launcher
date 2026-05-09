@@ -6,6 +6,7 @@ pub mod utils;
 
 use data::local::{LocalGameData, Settings};
 use data::remote::provider::{GitHubRawProvider, RemoteProvider};
+use state::AppState;
 use std::path::PathBuf;
 
 pub async fn run_from_args(
@@ -19,6 +20,7 @@ pub async fn run_from_args(
     let local_dir = exe_dir.join("local");
     let settings_path = launcher_dir.join("settings.json");
     let game_data_path = local_dir.join("game_data.json");
+    let game_list_path = exe_dir.join("data").join("game_list.json");
 
     std::fs::create_dir_all(&launcher_dir)?;
     std::fs::create_dir_all(&local_dir)?;
@@ -26,8 +28,13 @@ pub async fn run_from_args(
     let settings = Settings::load(&settings_path)?;
     let local = LocalGameData::load(&game_data_path)?;
 
-    println!("Settings: {:?}", settings);
-    println!("Installed games: {}", local.installed.len());
+    // Create AppState and share across app
+    let games_dir = exe_dir.join(&settings.install_dir);
+    let app = AppState::new(settings.clone(), local.clone(), games_dir, game_data_path.clone(), game_list_path, None);
+    let app = app.shared();
+
+    println!("Settings: {:?}", app.settings);
+    println!("Installed games: {}", app.local.installed.len());
 
     // CLI hook: fetch-games owner/repo
     if args.len() >= 3 && args[1] == "fetch-games"
