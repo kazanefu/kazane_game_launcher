@@ -1,6 +1,8 @@
+use kazane_game_launcher::data::remote::RemoteProvider;
 use std::path::PathBuf;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // Minimal binary wrapper — core logic lives in the library to keep main.rs clean for tests.
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 1 || args.iter().any(|a| a == "gui") {
@@ -14,22 +16,23 @@ fn main() {
             let local_dir = exe_dir.join("local");
             let settings_path = launcher_dir.join("settings.json");
             let game_data_path = local_dir.join("game_data.json");
-            let mut game_list_path = exe_dir.join("data").join("game_list.json");
-            // if not found, search upward to repository root for data/game_list.json (development mode)
-            if !game_list_path.exists() {
-                let mut dir = exe_dir.clone();
-                for _ in 0..6 {
-                    let candidate = dir.join("data").join("game_list.json");
-                    if candidate.exists() {
-                        game_list_path = candidate;
-                        break;
-                    }
-                    if let Some(parent) = dir.parent() {
-                        dir = parent.to_path_buf();
-                    } else {
-                        break;
-                    }
+            let game_list_path = exe_dir.join("data").join("game_list.json");
+
+            // On startup, fetch game list from GitHub and save to disk (overwriting any existing file).
+            let provider =
+                kazane_game_launcher::data::remote::provider::GitHubRawProvider::new(None);
+            if let Ok(game_list) = provider
+                .fetch_game_list("kazanefu", "kazane_game_launcher")
+                .await
+            {
+                if game_list.save_atomic(&game_list_path).is_err() {
+                    eprintln!(
+                        "failed to save game_list.json to {}",
+                        game_list_path.display()
+                    );
                 }
+            } else {
+                eprintln!("failed to fetch game list from GitHub");
             }
             std::fs::create_dir_all(&launcher_dir).ok();
             std::fs::create_dir_all(&local_dir).ok();

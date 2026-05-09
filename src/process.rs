@@ -33,10 +33,15 @@ impl ProcessManager {
 
     /// Start a process and track it under `id`.
     /// `args` is a slice of strings for command arguments.
-    pub async fn start(&self, id: &str, exe: PathBuf, args: &[String]) -> Result<RunningInfo, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start(
+        &self,
+        id: &str,
+        exe: PathBuf,
+        args: &[String],
+    ) -> Result<RunningInfo, Box<dyn std::error::Error + Send + Sync>> {
         // Prevent duplicate starts
         let mut map = loop {
-            let mut map = self.inner.lock().await;
+            let map = self.inner.lock().await;
             if let Some(entry) = map.get(id) {
                 let child_arc = entry.child.clone();
                 drop(map); // drop map lock before locking child to avoid deadlock with monitor
@@ -54,13 +59,17 @@ impl ProcessManager {
 
         // Resolve executable path if a directory was passed
         let exe_path = if exe.is_dir() {
-            resolve_executable_in_dir(exe.clone()).ok_or(format!("no executable found in {}", exe.display()))?
+            resolve_executable_in_dir(exe.clone())
+                .ok_or(format!("no executable found in {}", exe.display()))?
         } else {
             exe
         };
 
         // debug
-        eprintln!("ProcessManager::start - exe_path={:?} args={:?}", exe_path, args);
+        eprintln!(
+            "ProcessManager::start - exe_path={:?} args={:?}",
+            exe_path, args
+        );
 
         // Build command. On Windows, try to spawn with a new console for .exe so console games show a window and keep running.
         #[cfg(windows)]
@@ -70,10 +79,19 @@ impl ProcessManager {
         {
             use std::os::windows::process::CommandExt;
             // If an .exe is provided, prefer creating a new console so console games are visible
-            if exe_path.extension().and_then(|s| s.to_str()).map(|s| s.eq_ignore_ascii_case("exe")).unwrap_or(false) {
+            if exe_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("exe"))
+                .unwrap_or(false)
+            {
                 let mut std_cmd = std::process::Command::new(&exe_path);
-                if !args.is_empty() { std_cmd.args(args); }
-                if let Some(parent) = exe_path.parent() { std_cmd.current_dir(parent); }
+                if !args.is_empty() {
+                    std_cmd.args(args);
+                }
+                if let Some(parent) = exe_path.parent() {
+                    std_cmd.current_dir(parent);
+                }
                 // CREATE_NEW_CONSOLE = 0x00000010
                 std_cmd.creation_flags(0x00000010);
                 match tokio::process::Command::from(std_cmd).spawn() {
@@ -102,19 +120,26 @@ impl ProcessManager {
                     }
                 }
                 let mut cmd = if use_prog_str {
-                    let prog = exe_path.file_name()
+                    let prog = exe_path
+                        .file_name()
                         .and_then(|s| s.to_str())
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| exe_path.to_string_lossy().into_owned());
                     let mut c = tokio::process::Command::new("cmd");
                     let mut all_args = vec!["/C".to_string(), prog.clone()];
-                    for a in args { all_args.push(a.clone()); }
+                    for a in args {
+                        all_args.push(a.clone());
+                    }
                     c.args(all_args);
                     c
                 } else {
                     let mut c = tokio::process::Command::new(&exe_path);
-                    if !args.is_empty() { c.args(args); }
-                    if let Some(parent) = exe_path.parent() { c.current_dir(parent); }
+                    if !args.is_empty() {
+                        c.args(args);
+                    }
+                    if let Some(parent) = exe_path.parent() {
+                        c.current_dir(parent);
+                    }
                     c
                 };
                 cmd.spawn()?
@@ -122,8 +147,12 @@ impl ProcessManager {
         } else {
             // non-windows
             let mut cmd = tokio::process::Command::new(&exe_path);
-            if !args.is_empty() { cmd.args(args); }
-            if let Some(parent) = exe_path.parent() { cmd.current_dir(parent); }
+            if !args.is_empty() {
+                cmd.args(args);
+            }
+            if let Some(parent) = exe_path.parent() {
+                cmd.current_dir(parent);
+            }
             cmd.spawn()?
         };
 
@@ -189,7 +218,7 @@ impl ProcessManager {
             // First try graceful shutdown
             #[cfg(unix)]
             {
-                use nix::sys::signal::{kill, Signal};
+                use nix::sys::signal::{Signal, kill};
                 use nix::unistd::Pid;
                 let ch = child_arc.lock().await;
                 if let Some(pid) = ch.id() {

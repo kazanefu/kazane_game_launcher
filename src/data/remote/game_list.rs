@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GameListEntry {
@@ -29,19 +30,22 @@ impl GameList {
                     let namem = g.name.to_lowercase();
                     matched = idm.contains(&q) || namem.contains(&q);
                 }
-                if matched
-                    && let Some(ts) = tags {
-                        // require all tags to exist (case-insensitive)
-                        let entry_tags: Vec<String> = g.tags.iter().map(|t| t.to_lowercase()).collect();
-                        for &t in ts.iter() {
-                            if !entry_tags.contains(&t.to_lowercase()) {
-                                return false;
-                            }
+                if matched && let Some(ts) = tags {
+                    // require all tags to exist (case-insensitive)
+                    let entry_tags: Vec<String> = g.tags.iter().map(|t| t.to_lowercase()).collect();
+                    for &t in ts.iter() {
+                        if !entry_tags.contains(&t.to_lowercase()) {
+                            return false;
                         }
                     }
+                }
                 matched
             })
             .cloned()
             .collect()
+    }
+    pub fn save_atomic(&self, path: &Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Use locked write to ensure exclusive access across processes
+        crate::utils::file::write_json_with_lock(path, self)
     }
 }
