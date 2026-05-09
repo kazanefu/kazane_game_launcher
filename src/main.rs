@@ -13,7 +13,23 @@ fn main() {
             let local_dir = exe_dir.join("local");
             let settings_path = launcher_dir.join("settings.json");
             let game_data_path = local_dir.join("game_data.json");
-            let game_list_path = exe_dir.join("data").join("game_list.json");
+            let mut game_list_path = exe_dir.join("data").join("game_list.json");
+            // if not found, search upward to repository root for data/game_list.json (development mode)
+            if !game_list_path.exists() {
+                let mut dir = exe_dir.clone();
+                for _ in 0..6 {
+                    let candidate = dir.join("data").join("game_list.json");
+                    if candidate.exists() {
+                        game_list_path = candidate;
+                        break;
+                    }
+                    if let Some(parent) = dir.parent() {
+                        dir = parent.to_path_buf();
+                    } else {
+                        break;
+                    }
+                }
+            }
             std::fs::create_dir_all(&launcher_dir).ok();
             std::fs::create_dir_all(&local_dir).ok();
             let settings = kazane_game_launcher::data::local::Settings::load(&settings_path).unwrap_or_default();

@@ -258,12 +258,59 @@ async fn install_from_release_info(
         std::fs::write(&exe_path, &bytes).map_err(|e| InstallError::Other(e.to_string()))?;
     }
 
+    // Try to find an executable inside final_root (or use final_root directly)
+    fn find_executable_in(path: &std::path::Path) -> Option<std::path::PathBuf> {
+        if path.is_file() {
+            return Some(path.to_path_buf());
+        }
+        // search recursively for obvious executable files
+        let mut stack = vec![path.to_path_buf()];
+        while let Some(p) = stack.pop() {
+            if let Ok(rd) = std::fs::read_dir(&p) {
+                for e in rd.flatten() {
+                    let pth = e.path();
+                    if pth.is_dir() {
+                        stack.push(pth);
+                    } else if let Some(ext) = pth.extension().and_then(|s| s.to_str()) {
+                        // Windows common
+                        if ext.eq_ignore_ascii_case("exe") {
+                            return Some(pth);
+                        }
+                    } else {
+                        // on unix, check executable bit
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::PermissionsExt;
+                            if let Ok(md) = pth.metadata() {
+                                if md.permissions().mode() & 0o111 != 0 {
+                                    return Some(pth);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    let exe_candidate = find_executable_in(&final_root);
+    let (install_path_str, exe_path_opt) = if let Some(p) = exe_candidate {
+        // install_path is the directory, exe_path is the executable
+        let exe_path = p.to_string_lossy().to_string();
+        let dir = final_root.to_string_lossy().to_string();
+        (dir, Some(exe_path))
+    } else {
+        (final_root.to_string_lossy().to_string(), None)
+    };
+
     // Build InstalledGame struct
     let installed = InstalledGame {
         id: repo.to_string(),
         name: asset.name.clone(),
         version: release.latest.version.clone(),
-        install_path: final_root.to_string_lossy().to_string(),
+        install_path: install_path_str,
+        exe_path: exe_path_opt,
         repo: format!("https://github.com/{}/{}", owner, repo),
         installed: true,
         last_checked: None,

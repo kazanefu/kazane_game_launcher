@@ -2,8 +2,11 @@ use crate::data::local::{LocalGameData, InstalledGame, Settings};
 use crate::process::{ProcessManager, RunningInfo};
 use crate::data::remote::provider::GitHubRawProvider;
 use crate::installer::api::LauncherApi;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -11,6 +14,9 @@ pub struct AppState {
     pub local: LocalGameData,
     pub process: ProcessManager,
     pub launcher_api: LauncherApi<GitHubRawProvider>,
+    // runtime logs kept in memory and persisted to a file
+    pub logs: Arc<Mutex<Vec<String>>>,
+    pub log_path: PathBuf,
 }
 
 impl AppState {
@@ -18,12 +24,66 @@ impl AppState {
     pub fn new(settings: Settings, local: LocalGameData, games_dir: PathBuf, game_data_path: PathBuf, game_list_path: PathBuf, provider_branch: Option<&str>) -> Self {
         let provider = GitHubRawProvider::new(provider_branch);
         let launcher_api = LauncherApi::new(provider, games_dir.clone(), game_data_path.clone(), game_list_path);
-        Self { settings, local, process: ProcessManager::new(), launcher_api }
+        // place runtime log next to game_data.json (local dir)
+        let log_path = game_data_path.parent().unwrap_or(Path::new("")).join("runtime.log");
+        // ensure log file exists
+        if let Some(parent) = log_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::OpenOptions::new().create(true).append(true).open(&log_path);
+        let s = Self { settings, local, process: ProcessManager::new(), launcher_api, logs: Arc::new(Mutex::new(Vec::new())), log_path };
+        // initial startup log
+        s.append_log("INFO", "app started");
+        s
     }
 
     /// Return an Arc-wrapped shared instance for UI/CLI usage
     pub fn shared(self) -> Arc<Self> {
         Arc::new(self)
+    }
+
+    fn append_log_to_file(&self, line: &str) {
+        if let Some(parent) = self.log_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match OpenOptions::new().create(true).append(true).open(&self.log_path) {
+            Ok(mut f) => {
+                let _ = f.write_all(line.as_bytes());
+                let _ = f.write_all(b"\n");
+                let _ = f.sync_all();
+            }
+            Err(e) => {
+                eprintln!("failed to write log file {}: {}", self.log_path.display(), e);
+            }
+        }
+    }
+
+    /// Append a runtime log line (thread-safe). Also persist to disk and print to stderr.
+    pub fn append_log(&self, level: &str, msg: &str) {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let line = format!("[{}] {}: {}", now, level, msg);
+        // in-memory
+        if let Ok(mut logs) = self.logs.lock() {
+            logs.push(line.clone());
+            if logs.len() > 1000 {
+                // keep bounded
+                let excess = logs.len() - 1000;
+                logs.drain(0..excess);
+            }
+        }
+        // persist
+        self.append_log_to_file(&line);
+        // console
+        eprintln!("{}", line);
+    }
+
+    /// Return a copy of recent logs
+    pub fn get_logs(&self) -> Vec<String> {
+        if let Ok(logs) = self.logs.lock() {
+            logs.clone()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Start a game process tracked under `id`. `exe` is the executable path and `args` are arguments.

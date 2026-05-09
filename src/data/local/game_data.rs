@@ -6,7 +6,11 @@ pub struct InstalledGame {
     pub id: String,
     pub name: String,
     pub version: String,
+    /// Directory where the game was installed
     pub install_path: String,
+    /// Optional explicit executable path for launching the game
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe_path: Option<String>,
     pub repo: String,
     pub installed: bool,
     pub last_checked: Option<String>,
