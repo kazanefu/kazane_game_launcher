@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use tokio::process::Child;
 use tokio::sync::Mutex;
@@ -13,8 +13,9 @@ pub struct RunningInfo {
     pub start_time: SystemTime,
 }
 
+#[derive(Clone)]
 struct Entry {
-    child: Child,
+    child: Arc<Mutex<Child>>,
     start_time: SystemTime,
 }
 
@@ -114,18 +115,51 @@ impl ProcessManager {
             cmd.spawn()?
         };
 
-
         let pid = child.id().unwrap_or(0);
         let start_time = SystemTime::now();
+
+        // wrap child in shared Arc<Mutex<Child>> so monitor and stop can coordinate
+        let child_arc = Arc::new(Mutex::new(child));
 
         // Insert into map
         map.insert(
             id.to_string(),
             Entry {
-                child,
+                child: child_arc.clone(),
                 start_time,
             },
         );
+
+        // spawn a monitor that periodically checks for exit and removes the entry when done
+        let inner_clone = self.inner.clone();
+        let id_string = id.to_string();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                // try_wait without holding the map lock so stop() can also acquire child
+                let mut ch = child_arc.lock().await;
+                match ch.try_wait() {
+                    Ok(Some(_status)) => {
+                        // exited - remove from map
+                        let mut m = inner_clone.lock().await;
+                        m.remove(&id_string);
+                        break;
+                    }
+                    Ok(None) => {
+                        // still running
+                        drop(ch);
+                        continue;
+                    }
+                    Err(e) => {
+                        eprintln!("monitor try_wait error for {}: {}", id_string, e);
+                        // on error, attempt to remove entry and exit
+                        let mut m = inner_clone.lock().await;
+                        m.remove(&id_string);
+                        break;
+                    }
+                }
+            }
+        });
 
         Ok(RunningInfo {
             id: id.to_string(),
@@ -137,37 +171,36 @@ impl ProcessManager {
     /// Try to stop the process gracefully, then force-kill if it doesn't exit.
     pub async fn stop(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut map = self.inner.lock().await;
-        if let Some(mut entry) = map.remove(id) {
+        if let Some(entry) = map.remove(id) {
+            let child_arc = entry.child;
             // First try graceful shutdown
             #[cfg(unix)]
             {
                 use nix::sys::signal::{kill, Signal};
                 use nix::unistd::Pid;
-                if let Some(pid) = entry.child.id() {
+                let ch = child_arc.lock().await;
+                if let Some(pid) = ch.id() {
                     let _ = kill(Pid::from_raw(pid as i32), Signal::TERM);
                 }
+                drop(ch);
             }
 
             #[cfg(windows)]
             {
-                // Best-effort: try to kill; no standard graceful signal on windows
+                // no-op: we'll attempt a kill if graceful wait fails
             }
 
             // Wait a short time for exit, otherwise kill
-            use tokio::time::{sleep, Duration};
-            let wait = sleep(Duration::from_millis(500));
-            tokio::pin!(wait);
-
-            // Poll for exit
-            match tokio::time::timeout(Duration::from_secs(2), entry.child.wait()).await {
+            let mut ch = child_arc.lock().await;
+            match tokio::time::timeout(Duration::from_secs(2), ch.wait()).await {
                 Ok(Ok(_status)) => {
                     // exited
                     return Ok(());
                 }
                 _ => {
                     // try kill
-                    let _ = entry.child.kill().await;
-                    let _ = entry.child.wait().await;
+                    let _ = ch.kill().await;
+                    let _ = ch.wait().await;
                     return Ok(());
                 }
             }
@@ -177,18 +210,35 @@ impl ProcessManager {
 
     /// Check if a tracked id is running
     pub async fn is_running(&self, id: &str) -> bool {
-        let map = self.inner.lock().await;
-        map.get(id).map(|e| e.child.id().is_some()).unwrap_or(false)
+        // clone child arc to check without holding map lock while awaiting
+        let child_arc_opt = {
+            let map = self.inner.lock().await;
+            map.get(id).map(|e| e.child.clone())
+        };
+        if let Some(child_arc) = child_arc_opt {
+            let ch = child_arc.lock().await;
+            ch.id().is_some()
+        } else {
+            false
+        }
     }
 
     /// Return running info if present
     pub async fn get_info(&self, id: &str) -> Option<RunningInfo> {
-        let map = self.inner.lock().await;
-        map.get(id).and_then(|e| e.child.id().map(|pid| RunningInfo {
-            id: id.to_string(),
-            pid,
-            start_time: e.start_time,
-        }))
+        let (child_arc_opt, start_time_opt) = {
+            let map = self.inner.lock().await;
+            map.get(id).map(|e| (e.child.clone(), e.start_time)).unzip()
+        };
+        if let Some(child_arc) = child_arc_opt {
+            let ch = child_arc.lock().await;
+            ch.id().map(|pid| RunningInfo {
+                id: id.to_string(),
+                pid,
+                start_time: start_time_opt.unwrap_or(SystemTime::now()),
+            })
+        } else {
+            None
+        }
     }
 }
 

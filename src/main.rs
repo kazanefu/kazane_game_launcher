@@ -3,7 +3,7 @@ use std::path::PathBuf;
 fn main() {
     // Minimal binary wrapper — core logic lives in the library to keep main.rs clean for tests.
     let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "gui") {
+    if args.len() == 1 || args.iter().any(|a| a == "gui") {
         // create app state and run GUI synchronously
         if let Err(e) = kazane_game_launcher::run_gui({
             let exe_dir = std::env::current_exe().ok()
