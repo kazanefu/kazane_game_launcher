@@ -23,7 +23,8 @@ where
     }
 
     fn find_game_entry(&self, id: &str) -> Result<GameListEntry, Box<dyn std::error::Error + Send + Sync>> {
-        let gl: GameList = file::read_json(&self.game_list_path)?;
+        // Use locked read to avoid races with writers
+        let gl: GameList = file::read_json_with_lock(&self.game_list_path)?;
         gl.games.into_iter().find(|g| g.id == id).ok_or_else(|| format!("game id not found: {}", id).into())
     }
 
@@ -33,6 +34,12 @@ where
             .map(|s| s.trim_end_matches('/'))
             .and_then(|s| s.split_once('/'))
             .map(|(a,b)| (a.to_string(), b.to_string()))
+    }
+
+    /// Search games by query and optional tags. Returns matching GameListEntry items.
+    pub fn search_games(&self, query: &str, tags: Option<&[&str]>) -> Result<Vec<GameListEntry>, Box<dyn std::error::Error + Send + Sync>> {
+        let gl: GameList = file::read_json_with_lock(&self.game_list_path)?;
+        Ok(gl.search(query, tags))
     }
 
     /// Install by game id (lookup repo from game_list.json). Progress/cancel may be passed from UI.
@@ -81,7 +88,8 @@ where
             let release = self.provider.fetch_release(&owner, &repo).await?;
             // load local
             let local = LocalGameData::load(&self.game_data_path)?;
-            let local_entry = local.installed.iter().find(|g| g.id == repo).cloned();
+            // Find by game id (same id used by install/uninstall APIs)
+            let local_entry = local.installed.iter().find(|g| g.id == id).cloned();
             let remote_version = release.latest.version.clone();
             let do_install = match local_entry {
                 Some(ref le) => le.version != remote_version,
