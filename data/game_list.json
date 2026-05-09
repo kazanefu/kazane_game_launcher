@@ -11,7 +11,19 @@
       "name": "Zip Sample Game",
       "repo": "https://github.com/kazanefu/zip_sample_game",
       "description": "zip distribution for tests",
-      "tags": ["sample-tag"]
+      "tags": [
+        "sample-tag"
+      ]
+    },
+    {
+      "id": "throtate",
+      "name": "Throtate",
+      "repo": "https://github.com/kazanefu/throtate",
+      "description": "Spin and Throw! A New Type of Action Game!",
+      "tags": [
+        "action",
+        "kazane"
+      ]
     }
   ]
 }
