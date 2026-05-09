@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use kazane_game_launcher::data::remote::RemoteProvider;
 use std::path::PathBuf;
 
