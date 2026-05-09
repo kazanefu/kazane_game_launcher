@@ -35,10 +35,22 @@ impl ProcessManager {
     /// `args` is a slice of strings for command arguments.
     pub async fn start(&self, id: &str, exe: PathBuf, args: &[String]) -> Result<RunningInfo, Box<dyn std::error::Error + Send + Sync>> {
         // Prevent duplicate starts
-        let mut map = self.inner.lock().await;
-        if map.contains_key(id) {
-            return Err(format!("already running: {}", id).into());
-        }
+        let mut map = loop {
+            let mut map = self.inner.lock().await;
+            if let Some(entry) = map.get(id) {
+                let child_arc = entry.child.clone();
+                drop(map); // drop map lock before locking child to avoid deadlock with monitor
+                let mut ch = child_arc.lock().await;
+                if let Ok(None) = ch.try_wait() {
+                    return Err(format!("already running: {}", id).into());
+                }
+                // Exited, remove it and continue checking (in case another thread started one in the gap)
+                let mut map = self.inner.lock().await;
+                map.remove(id);
+                continue;
+            }
+            break map;
+        };
 
         // Resolve executable path if a directory was passed
         let exe_path = if exe.is_dir() {
@@ -172,6 +184,7 @@ impl ProcessManager {
     pub async fn stop(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut map = self.inner.lock().await;
         if let Some(entry) = map.remove(id) {
+            drop(map); // drop map lock before locking child to avoid deadlock with monitor
             let child_arc = entry.child;
             // First try graceful shutdown
             #[cfg(unix)]
@@ -216,8 +229,16 @@ impl ProcessManager {
             map.get(id).map(|e| e.child.clone())
         };
         if let Some(child_arc) = child_arc_opt {
-            let ch = child_arc.lock().await;
-            ch.id().is_some()
+            let mut ch = child_arc.lock().await;
+            match ch.try_wait() {
+                Ok(None) => true,
+                _ => {
+                    // exited or error - remove from map
+                    let mut map = self.inner.lock().await;
+                    map.remove(id);
+                    false
+                }
+            }
         } else {
             false
         }
