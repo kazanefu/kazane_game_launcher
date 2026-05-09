@@ -22,13 +22,14 @@ impl LocalGameData {
         if !path.exists() {
             return Ok(LocalGameData::default());
         }
-        let s = std::fs::read_to_string(path)?;
-        let v = serde_json::from_str(&s)?;
+        // Use locked read to avoid concurrent writers
+        let v: LocalGameData = crate::utils::file::read_json_with_lock(path)?;
         Ok(v)
     }
 
     pub fn save_atomic(&self, path: &Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        crate::utils::file::write_json_atomic(path, self)
+        // Use locked write to ensure exclusive access across processes
+        crate::utils::file::write_json_with_lock(path, self)
     }
 
     pub fn find(&self, id: &str) -> Option<&InstalledGame> {
