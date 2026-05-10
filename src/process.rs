@@ -58,13 +58,16 @@ impl ProcessManager {
             break map;
         };
 
-        // Resolve executable path: use exe_path if it exists, otherwise search in install_path
+        // Resolve executable path: prioritize exe_path if it exists, otherwise search in install_path
         let resolved_exe_path = if let Some(ref p) = exe_path {
             if p.is_file() && p.exists() {
                 p.clone()
             } else {
                 #[cfg(debug_assertions)]
-                println!("Debug: exe_path {:?} not found, searching in {:?}", p, install_path);
+                println!(
+                    "Debug: exe_path {:?} not found, searching in {:?}",
+                    exe_path, install_path
+                );
                 resolve_executable_in_dir(install_path.clone())
                     .ok_or(format!("no executable found in {}", install_path.display()))?
             }
@@ -73,19 +76,56 @@ impl ProcessManager {
                 .ok_or(format!("no executable found in {}", install_path.display()))?
         };
 
+        // Determine working directory
+        let working_dir = if let Some(parent) = resolved_exe_path.parent() {
+            if parent.as_os_str().is_empty() {
+                install_path.clone()
+            } else {
+                parent.to_path_buf()
+            }
+        } else {
+            install_path.clone()
+        };
+
+        // Canonicalize paths to ensure they are absolute and valid
+        let resolved_exe_path = std::fs::canonicalize(&resolved_exe_path).unwrap_or(resolved_exe_path);
+        let working_dir = std::fs::canonicalize(&working_dir).unwrap_or(working_dir);
+
+        // On Windows, strip the UNC prefix (\\?\) if it exists, as some games don't handle it well
+        #[cfg(windows)]
+        let resolved_exe_path = {
+            let s = resolved_exe_path.to_string_lossy();
+            if s.starts_with(r"\\?\") {
+                PathBuf::from(&s[4..])
+            } else {
+                resolved_exe_path
+            }
+        };
+        #[cfg(windows)]
+        let working_dir = {
+            let s = working_dir.to_string_lossy();
+            if s.starts_with(r"\\?\") {
+                PathBuf::from(&s[4..])
+            } else {
+                working_dir
+            }
+        };
+
         // debug
         eprintln!(
-            "ProcessManager::start - exe_path={:?} args={:?}",
-            resolved_exe_path, args
+            "ProcessManager::start - canonical_exe_path={:?} canonical_working_dir={:?} args={:?}",
+            resolved_exe_path, working_dir, args
         );
 
-        // Build command. On Windows, try to spawn with a new console for .exe so console games show a window and keep running.
-        #[cfg(windows)]
-        let mut maybe_child: Option<tokio::process::Child> = None;
+        // Build command.
+        let mut cmd = tokio::process::Command::new(&resolved_exe_path);
+        if !args.is_empty() {
+            cmd.args(args);
+        }
+        cmd.current_dir(&working_dir);
 
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
             // If an .exe is provided, prefer creating a new console so console games are visible
             if resolved_exe_path
                 .extension()
@@ -93,76 +133,12 @@ impl ProcessManager {
                 .map(|s| s.eq_ignore_ascii_case("exe"))
                 .unwrap_or(false)
             {
-                let mut std_cmd = std::process::Command::new(&resolved_exe_path);
-                if !args.is_empty() {
-                    std_cmd.args(args);
-                }
-                if let Some(parent) = resolved_exe_path.parent() {
-                    std_cmd.current_dir(parent);
-                }
                 // CREATE_NEW_CONSOLE = 0x00000010
-                std_cmd.creation_flags(0x00000010);
-                match tokio::process::Command::from(std_cmd).spawn() {
-                    Ok(c) => {
-                        maybe_child = Some(c);
-                    }
-                    Err(e) => {
-                        eprintln!("failed to spawn with CREATE_NEW_CONSOLE: {}", e);
-                    }
-                }
+                cmd.creation_flags(0x00000010);
             }
         }
 
-        // If Windows spawn with new console didn't work or not on Windows, fall back to building a normal command
-        let child = if cfg!(windows) {
-            if let Some(c) = maybe_child {
-                c
-            } else {
-                // fallback: if bare program name, use cmd /C to resolve PATH, else spawn directly
-                let mut use_prog_str = false;
-                #[cfg(windows)]
-                {
-                    let s = resolved_exe_path.to_string_lossy();
-                    if !s.contains('\\') && !s.contains('/') {
-                        use_prog_str = true;
-                    }
-                }
-                let mut cmd = if use_prog_str {
-                    let prog = resolved_exe_path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| resolved_exe_path.to_string_lossy().into_owned());
-                    let mut c = tokio::process::Command::new("cmd");
-                    let mut all_args = vec!["/C".to_string(), prog.clone()];
-                    for a in args {
-                        all_args.push(a.clone());
-                    }
-                    c.args(all_args);
-                    c
-                } else {
-                    let mut c = tokio::process::Command::new(&resolved_exe_path);
-                    if !args.is_empty() {
-                        c.args(args);
-                    }
-                    if let Some(parent) = resolved_exe_path.parent() {
-                        c.current_dir(parent);
-                    }
-                    c
-                };
-                cmd.spawn()?
-            }
-        } else {
-            // non-windows
-            let mut cmd = tokio::process::Command::new(&resolved_exe_path);
-            if !args.is_empty() {
-                cmd.args(args);
-            }
-            if let Some(parent) = resolved_exe_path.parent() {
-                cmd.current_dir(parent);
-            }
-            cmd.spawn()?
-        };
+        let child = cmd.spawn()?;
 
         let pid = child.id().unwrap_or(0);
         let start_time = SystemTime::now();
