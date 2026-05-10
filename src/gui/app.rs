@@ -258,6 +258,37 @@ impl eframe::App for LauncherGui {
                                     }
                                 });
                                 ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
+                                    if ui.button("Show README").clicked() {
+                                        let id = entry.id.clone();
+                                        let app2 = self.app_state.clone();
+                                        self.status = "fetching README...".to_string();
+                                        let readme_handle = std::thread::spawn(move || {
+                                            let rt = tokio::runtime::Runtime::new().expect("tokio");
+                                            let readme = rt.block_on(app2.get_readme_by_id(&id));
+                                            if let Err(e) = &readme {
+                                                app2.append_log(
+                                                    "ERROR",
+                                                    &format!(
+                                                        "error fetching README for {}: {}",
+                                                        id, e
+                                                    ),
+                                                );
+                                            } else {
+                                                app2.append_log(
+                                                    "INFO",
+                                                    &format!("fetched README for {}", id),
+                                                );
+                                            }
+                                            readme
+                                        });
+                                        let readme_result = readme_handle
+                                            .join()
+                                            .unwrap_or_else(|_| Ok("thread panicked".into()));
+                                        self.readme.search =
+                                            Some(readme_result.unwrap_or_else(|e| {
+                                                format!("error fetching README: {}", e)
+                                            }));
+                                    }
                                     if installed.is_none() {
                                         if ui.button("Install").clicked() {
                                             let id = entry.id.clone();
@@ -369,6 +400,11 @@ impl eframe::App for LauncherGui {
                                 });
                             });
                             ui.separator();
+                        }
+                        if let Some(readme) = &self.readme.search {
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                CommonMarkViewer::new().show(ui, &mut self.readme.cache, readme);
+                            });
                         }
                     });
                 });
