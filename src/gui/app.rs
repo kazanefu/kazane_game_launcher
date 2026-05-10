@@ -140,14 +140,15 @@ impl eframe::App for LauncherGui {
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new(&ig.name).strong());
                             ui.label(format!("version: {}", ig.version));
-                            if ui.button("Launch").clicked() {
-                                let id = ig.id.clone();
-                                let path = std::path::PathBuf::from(&ig.install_path);
-                                let app2 = self.app_state.clone();
-                                self.status = "launching...".to_string();
-                                std::thread::spawn(move || {
-                                    let rt = tokio::runtime::Runtime::new().expect("tokio");
-                                    let res = rt.block_on(app2.start_game(&id, path.clone(), &[]));
+                                if ui.button("Launch").clicked() {
+                                    let id = ig.id.clone();
+                                    let install_path = std::path::PathBuf::from(&ig.install_path);
+                                    let exe_path = ig.exe_path.as_ref().map(std::path::PathBuf::from);
+                                    let app2 = self.app_state.clone();
+                                    self.status = "launching...".to_string();
+                                    std::thread::spawn(move || {
+                                        let rt = tokio::runtime::Runtime::new().expect("tokio");
+                                        let res = rt.block_on(app2.start_game(&id, install_path, exe_path, &[]));
                                     match res {
                                         Ok(info) => app2.append_log(
                                             "INFO",
@@ -322,18 +323,17 @@ impl eframe::App for LauncherGui {
                                             && let Some(ig) = &installed
                                         {
                                             let id = ig.id.clone();
-                                            let path = std::path::PathBuf::from(&ig.install_path);
-                                            let app = self.app_state.clone();
-                                            let id2 = id.clone();
-                                            let path2 = path.clone();
-                                            let app2 = app.clone();
+                                            let install_path = std::path::PathBuf::from(&ig.install_path);
+                                            let exe_path = ig.exe_path.as_ref().map(std::path::PathBuf::from);
+                                            let app2 = self.app_state.clone();
                                             self.status = "launching...".to_string();
                                             std::thread::spawn(move || {
                                                 let rt =
                                                     tokio::runtime::Runtime::new().expect("tokio");
                                                 let res = rt.block_on(app2.start_game(
-                                                    &id2,
-                                                    path2.clone(),
+                                                    &id,
+                                                    install_path,
+                                                    exe_path,
                                                     &[],
                                                 ));
                                                 match res {
@@ -346,7 +346,7 @@ impl eframe::App for LauncherGui {
                                                     ),
                                                     Err(e) => app2.append_log(
                                                         "ERROR",
-                                                        &format!("start error {}: {}", id2, e),
+                                                        &format!("start error {}: {}", id, e),
                                                     ),
                                                 }
                                             });
