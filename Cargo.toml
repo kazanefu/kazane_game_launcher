@@ -8,8 +8,8 @@ async-trait = "0.1"
 
 eframe = "0.34.2"
 egui = "0.34.2"
-egui_commonmark = "0.23.0"
-image = { version = "0.25.10", features = ["png", "jpeg"] }
+egui_commonmark = { version = "0.23.0", features = ["fetch"] }
+image = { version = "0.25.10",default-features = false, features = ["png", "jpeg"] }
 
 reqwest = { version = "0.13.3", features = ["stream"] }
 futures-util = "0.3"
