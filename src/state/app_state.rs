@@ -122,18 +122,17 @@ impl AppState {
         }
     }
 
-    /// Start a game process tracked under `id`. `exe` is the executable path and `args` are arguments.
+    /// Start a game process tracked under `id`. `install_path` is the directory and `exe_path` is the optional explicit executable.
     pub async fn start_game(
         &self,
         id: &str,
-        exe: PathBuf,
+        install_path: PathBuf,
+        exe_path: Option<PathBuf>,
         args: &[String],
     ) -> Result<RunningInfo, Box<dyn std::error::Error + Send + Sync>> {
-        let info = self.process.start(id, exe, args).await?;
+        let info = self.process.start(id, install_path, exe_path, args).await?;
         Ok(info)
     }
-
-    /// Stop the tracked game process
     pub async fn stop_game(
         &self,
         id: &str,

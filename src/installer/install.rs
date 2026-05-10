@@ -353,7 +353,17 @@ async fn install_from_release_info(
         None
     }
 
-    let exe_candidate = find_executable_in(&final_root);
+    let exe_path_from_asset = asset.entry_point.as_ref().map(|ep| final_root.join(ep));
+    let exe_candidate = if let Some(p) = exe_path_from_asset.as_ref().filter(|p| p.exists()) {
+        Some(p.clone())
+    } else {
+        #[cfg(debug_assertions)]
+        if let Some(p) = &exe_path_from_asset {
+            println!("Debug: Specified entry_point {:?} not found, searching...", p);
+        }
+        find_executable_in(&final_root)
+    };
+
     let (install_path_str, exe_path_opt) = if let Some(p) = exe_candidate {
         // install_path is the directory, exe_path is the executable
         let exe_path = p.to_string_lossy().to_string();
