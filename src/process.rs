@@ -44,8 +44,7 @@ impl ProcessManager {
         let mut map = self.handle_duplicate_start(id).await?;
 
         // Resolve paths
-        let (resolved_exe_path, working_dir) =
-            self.resolve_paths(install_path, exe_path).map_err(|e| e)?;
+        let (resolved_exe_path, working_dir) = self.resolve_paths(install_path, exe_path)?;
 
         // Build command
         let mut cmd = self.build_command(&resolved_exe_path, &working_dir, args);
