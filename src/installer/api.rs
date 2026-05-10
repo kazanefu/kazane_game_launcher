@@ -109,40 +109,12 @@ where
     }
 
     /// Uninstall by id (repo name). Removes install dir and removes from local game_data.json
-    fn clear_readonly_recursive(path: &Path) -> std::io::Result<()> {
-        if !path.exists() {
-            return Ok(());
-        }
-        if path.is_file() {
-            let mut perms = path.metadata()?.permissions();
-            perms.set_readonly(false);
-            std::fs::set_permissions(path, perms)?;
-            return Ok(());
-        }
-        // directory
-        for entry in std::fs::read_dir(path)? {
-            let entry = entry?;
-            let p = entry.path();
-            if p.is_dir() {
-                Self::clear_readonly_recursive(&p)?;
-                let mut perms = p.metadata()?.permissions();
-                perms.set_readonly(false);
-                std::fs::set_permissions(&p, perms)?;
-            } else {
-                let mut perms = p.metadata()?.permissions();
-                perms.set_readonly(false);
-                std::fs::set_permissions(&p, perms)?;
-            }
-        }
-        Ok(())
-    }
-
     fn try_remove_path(path: &Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if !path.exists() {
             return Ok(());
         }
         // clear readonly flags recursively then attempt removal
-        if let Err(e) = Self::clear_readonly_recursive(path) {
+        if let Err(e) = file::clear_readonly_recursive(path) {
             // non-fatal: log via stderr and continue
             eprintln!("warning: failed clearing readonly flags: {}", e);
         }
@@ -190,7 +162,7 @@ where
                 && parent.exists()
             {
                 // clear readonly on parent then try remove if empty
-                let _ = Self::clear_readonly_recursive(parent);
+                let _ = file::clear_readonly_recursive(parent);
                 let _ = std::fs::remove_dir(parent);
             }
             local.save_atomic(&self.game_data_path)?;
