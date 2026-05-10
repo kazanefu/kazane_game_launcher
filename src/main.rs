@@ -23,7 +23,7 @@ async fn main() {
             let provider =
                 kazane_game_launcher::data::remote::provider::GitHubRawProvider::new(None);
             if let Ok(game_list) = provider
-                .fetch_game_list("kazanefu", "kazane_game_launcher")
+                .fetch_game_list("kazanefu", "launcher_game_list")
                 .await
             {
                 if game_list.save_atomic(&game_list_path).is_err() {
