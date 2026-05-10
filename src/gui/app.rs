@@ -1,6 +1,6 @@
 use crate::data::remote::GameListEntry;
 use crate::state::AppState;
-use eframe::egui;
+use eframe::{egui, icon_data::from_png_bytes};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use std::sync::Arc;
 
@@ -393,7 +393,15 @@ impl eframe::App for LauncherGui {
 
 /// Start the GUI. This function is synchronous and will run the eframe event loop.
 pub fn run_gui(app_state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let native_options = eframe::NativeOptions::default();
+    let icon_bytes = include_bytes!("../../assets/icon/launcher_icon.png");
+    let icon = from_png_bytes(icon_bytes).unwrap();
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("Kazane Game Launcher")
+            .with_icon(icon),
+        ..Default::default()
+    };
+
     let app_state_clone = app_state.clone();
     eframe::run_native(
         "Kazane Game Launcher",

@@ -27,4 +27,7 @@ zip = "8.6.0"
 tempfile = "3.3"
 fs2 = "0.4.3"
 
+[build-dependencies]
+winres = "0.1.12"
+
 [dev-dependencies]
