@@ -451,6 +451,7 @@ pub fn run_gui(app_state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error
                 ctx.set_visuals(egui::Visuals::light());
             }
             setup_fonts(ctx);
+            ctx.set_pixels_per_point(app_state_clone.settings.size);
             Ok(Box::new(LauncherGui::new(app_state_clone.clone())))
         }),
     )?;

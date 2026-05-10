@@ -5,6 +5,7 @@ use std::path::Path;
 pub struct Settings {
     pub install_dir: String,
     pub theme: String,
+    pub size: f32,
 }
 
 impl Default for Settings {
@@ -12,6 +13,7 @@ impl Default for Settings {
         Self {
             install_dir: "games".to_string(),
             theme: "dark".to_string(),
+            size: 1.0,
         }
     }
 }
