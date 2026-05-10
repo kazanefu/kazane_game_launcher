@@ -141,26 +141,12 @@ impl eframe::App for LauncherGui {
                             ui.label(egui::RichText::new(&ig.name).strong());
                             ui.label(format!("version: {}", ig.version));
                                 if ui.button("Launch").clicked() {
-                                    let id = ig.id.clone();
-                                    let install_path = std::path::PathBuf::from(&ig.install_path);
-                                    let exe_path = ig.exe_path.as_ref().map(std::path::PathBuf::from);
-                                    let app2 = self.app_state.clone();
-                                    self.status = "launching...".to_string();
-                                    std::thread::spawn(move || {
-                                        let rt = tokio::runtime::Runtime::new().expect("tokio");
-                                        let res = rt.block_on(app2.start_game(&id, install_path, exe_path, &[]));
-                                    match res {
-                                        Ok(info) => app2.append_log(
-                                            "INFO",
-                                            &format!("started {} pid={}", info.id, info.pid),
-                                        ),
-                                        Err(e) => app2.append_log(
-                                            "ERROR",
-                                            &format!("start error {}: {}", id, e),
-                                        ),
-                                    }
-                                });
-                            }
+                                    self.app_state.launch_game_detached(
+                                        ig.id.clone(),
+                                        std::path::PathBuf::from(&ig.install_path),
+                                        ig.exe_path.as_ref().map(std::path::PathBuf::from),
+                                    );
+                                }
                             if ui.button("Uninstall").clicked() {
                                 let id = ig.id.clone();
                                 let app2 = self.app_state.clone();
@@ -322,34 +308,11 @@ impl eframe::App for LauncherGui {
                                         if ui.button("Launch").clicked()
                                             && let Some(ig) = &installed
                                         {
-                                            let id = ig.id.clone();
-                                            let install_path = std::path::PathBuf::from(&ig.install_path);
-                                            let exe_path = ig.exe_path.as_ref().map(std::path::PathBuf::from);
-                                            let app2 = self.app_state.clone();
-                                            self.status = "launching...".to_string();
-                                            std::thread::spawn(move || {
-                                                let rt =
-                                                    tokio::runtime::Runtime::new().expect("tokio");
-                                                let res = rt.block_on(app2.start_game(
-                                                    &id,
-                                                    install_path,
-                                                    exe_path,
-                                                    &[],
-                                                ));
-                                                match res {
-                                                    Ok(info) => app2.append_log(
-                                                        "INFO",
-                                                        &format!(
-                                                            "started {} pid={}",
-                                                            info.id, info.pid
-                                                        ),
-                                                    ),
-                                                    Err(e) => app2.append_log(
-                                                        "ERROR",
-                                                        &format!("start error {}: {}", id, e),
-                                                    ),
-                                                }
-                                            });
+                                            self.app_state.launch_game_detached(
+                                                ig.id.clone(),
+                                                std::path::PathBuf::from(&ig.install_path),
+                                                ig.exe_path.as_ref().map(std::path::PathBuf::from),
+                                            );
                                         }
                                         if ui.button("Uninstall").clicked() {
                                             let id = entry.id.clone();

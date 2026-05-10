@@ -41,33 +41,77 @@ impl ProcessManager {
         args: &[String],
     ) -> Result<RunningInfo, Box<dyn std::error::Error + Send + Sync>> {
         // Prevent duplicate starts
-        let mut map = loop {
+        let mut map = self.handle_duplicate_start(id).await?;
+
+        // Resolve paths
+        let (resolved_exe_path, working_dir) =
+            self.resolve_paths(install_path, exe_path).map_err(|e| e)?;
+
+        // Build command
+        let mut cmd = self.build_command(&resolved_exe_path, &working_dir, args);
+
+        let child = cmd.spawn()?;
+
+        let pid = child.id().unwrap_or(0);
+        let start_time = SystemTime::now();
+
+        // wrap child in shared Arc<Mutex<Child>> so monitor and stop can coordinate
+        let child_arc = Arc::new(Mutex::new(child));
+
+        // Insert into map
+        map.insert(
+            id.to_string(),
+            Entry {
+                child: child_arc.clone(),
+                start_time,
+            },
+        );
+
+        // spawn a monitor that periodically checks for exit and removes the entry when done
+        self.spawn_exit_monitor(id, child_arc.clone());
+
+        Ok(RunningInfo {
+            id: id.to_string(),
+            pid,
+            start_time,
+        })
+    }
+
+    async fn handle_duplicate_start(
+        &self,
+        id: &str,
+    ) -> Result<
+        tokio::sync::MutexGuard<'_, HashMap<String, Entry>>,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        loop {
             let map = self.inner.lock().await;
             if let Some(entry) = map.get(id) {
                 let child_arc = entry.child.clone();
-                drop(map); // drop map lock before locking child to avoid deadlock with monitor
+                drop(map); // drop map lock before locking child to avoid deadlock
                 let mut ch = child_arc.lock().await;
                 if let Ok(None) = ch.try_wait() {
                     return Err(format!("already running: {}", id).into());
                 }
-                // Exited, remove it and continue checking (in case another thread started one in the gap)
+                // Exited, remove it and continue checking
                 let mut map = self.inner.lock().await;
                 map.remove(id);
                 continue;
             }
-            break map;
-        };
+            return Ok(map);
+        }
+    }
 
+    fn resolve_paths(
+        &self,
+        install_path: PathBuf,
+        exe_path: Option<PathBuf>,
+    ) -> Result<(PathBuf, PathBuf), String> {
         // Resolve executable path: prioritize exe_path if it exists, otherwise search in install_path
         let resolved_exe_path = if let Some(ref p) = exe_path {
             if p.is_file() && p.exists() {
                 p.clone()
             } else {
-                #[cfg(debug_assertions)]
-                println!(
-                    "Debug: exe_path {:?} not found, searching in {:?}",
-                    exe_path, install_path
-                );
                 resolve_executable_in_dir(install_path.clone())
                     .ok_or(format!("no executable found in {}", install_path.display()))?
             }
@@ -103,21 +147,22 @@ impl ProcessManager {
                 .join(working_dir)
         };
 
-        // debug
-        eprintln!(
-            "ProcessManager::start - exe_path={:?} working_dir={:?} args={:?}",
-            resolved_exe_path, working_dir, args
-        );
+        Ok((resolved_exe_path, working_dir))
+    }
 
-        // Build command.
-        let mut cmd = tokio::process::Command::new(&resolved_exe_path);
+    fn build_command(
+        &self,
+        exe_path: &PathBuf,
+        working_dir: &PathBuf,
+        args: &[String],
+    ) -> tokio::process::Command {
+        let mut cmd = tokio::process::Command::new(exe_path);
         if !args.is_empty() {
             cmd.args(args);
         }
-        cmd.current_dir(&working_dir);
+        cmd.current_dir(working_dir);
 
-        // Filter out Cargo-specific environment variables that might interfere with asset loading
-        // (especially common if the game is also written in Rust/Bevy and launched via cargo run)
+        // Filter out Cargo-specific environment variables
         let cargo_vars: Vec<String> = std::env::vars()
             .map(|(k, _)| k)
             .filter(|k| k.starts_with("CARGO_"))
@@ -128,8 +173,7 @@ impl ProcessManager {
 
         #[cfg(windows)]
         {
-            // If an .exe is provided, prefer creating a new console so console games are visible
-            if resolved_exe_path
+            if exe_path
                 .extension()
                 .and_then(|s| s.to_str())
                 .map(|s| s.eq_ignore_ascii_case("exe"))
@@ -140,46 +184,28 @@ impl ProcessManager {
             }
         }
 
-        let child = cmd.spawn()?;
+        cmd
+    }
 
-        let pid = child.id().unwrap_or(0);
-        let start_time = SystemTime::now();
-
-        // wrap child in shared Arc<Mutex<Child>> so monitor and stop can coordinate
-        let child_arc = Arc::new(Mutex::new(child));
-
-        // Insert into map
-        map.insert(
-            id.to_string(),
-            Entry {
-                child: child_arc.clone(),
-                start_time,
-            },
-        );
-
-        // spawn a monitor that periodically checks for exit and removes the entry when done
+    fn spawn_exit_monitor(&self, id: &str, child_arc: Arc<Mutex<Child>>) {
         let inner_clone = self.inner.clone();
         let id_string = id.to_string();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                // try_wait without holding the map lock so stop() can also acquire child
                 let mut ch = child_arc.lock().await;
                 match ch.try_wait() {
                     Ok(Some(_status)) => {
-                        // exited - remove from map
                         let mut m = inner_clone.lock().await;
                         m.remove(&id_string);
                         break;
                     }
                     Ok(None) => {
-                        // still running
                         drop(ch);
                         continue;
                     }
                     Err(e) => {
                         eprintln!("monitor try_wait error for {}: {}", id_string, e);
-                        // on error, attempt to remove entry and exit
                         let mut m = inner_clone.lock().await;
                         m.remove(&id_string);
                         break;
@@ -187,12 +213,6 @@ impl ProcessManager {
                 }
             }
         });
-
-        Ok(RunningInfo {
-            id: id.to_string(),
-            pid,
-            start_time,
-        })
     }
 
     /// Try to stop the process gracefully, then force-kill if it doesn't exit.
