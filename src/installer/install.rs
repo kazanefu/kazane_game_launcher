@@ -206,33 +206,7 @@ async fn install_from_release_info(
         }
         if final_root.exists() {
             // attempt to remove readonly flags then remove; if that fails, try to rename old dir out of the way
-            fn clear_readonly_recursive(path: &Path) -> std::io::Result<()> {
-                if !path.exists() {
-                    return Ok(());
-                }
-                if path.is_file() {
-                    let mut perms = path.metadata()?.permissions();
-                    perms.set_readonly(false);
-                    std::fs::set_permissions(path, perms)?;
-                    return Ok(());
-                }
-                for entry in std::fs::read_dir(path)? {
-                    let entry = entry?;
-                    let p = entry.path();
-                    if p.is_dir() {
-                        clear_readonly_recursive(&p)?;
-                        let mut perms = p.metadata()?.permissions();
-                        perms.set_readonly(false);
-                        std::fs::set_permissions(&p, perms)?;
-                    } else {
-                        let mut perms = p.metadata()?.permissions();
-                        perms.set_readonly(false);
-                        std::fs::set_permissions(&p, perms)?;
-                    }
-                }
-                Ok(())
-            }
-            if let Err(e) = clear_readonly_recursive(&final_root) {
+            if let Err(e) = crate::utils::file::clear_readonly_recursive(&final_root) {
                 eprintln!(
                     "warning: failed to clear readonly on {}: {}",
                     final_root.display(),

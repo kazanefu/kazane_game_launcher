@@ -69,3 +69,32 @@ pub fn write_json_with_lock<T: Serialize>(
     let _lock = open_lock_file(path, true)?;
     write_json_atomic(path, value)
 }
+
+/// Recursively clear the read-only flag from a file or directory.
+/// This is used prior to deletion to ensure the operation succeeds on all platforms.
+#[allow(clippy::permissions_set_readonly_false)]
+pub fn clear_readonly_recursive(path: &Path) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if path.is_file() {
+        let mut perms = fs::metadata(path)?.permissions();
+        if perms.readonly() {
+            perms.set_readonly(false);
+            fs::set_permissions(path, perms)?;
+        }
+        return Ok(());
+    }
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let p = entry.path();
+        clear_readonly_recursive(&p)?;
+    }
+    // Also clear the directory's own readonly bit
+    let mut perms = fs::metadata(path)?.permissions();
+    if perms.readonly() {
+        perms.set_readonly(false);
+        fs::set_permissions(path, perms)?;
+    }
+    Ok(())
+}

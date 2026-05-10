@@ -133,6 +133,30 @@ impl AppState {
         let info = self.process.start(id, install_path, exe_path, args).await?;
         Ok(info)
     }
+
+    /// Spawns a background thread to launch a game and handles logging the result.
+    pub fn launch_game_detached(
+        &self,
+        id: String,
+        install_path: PathBuf,
+        exe_path: Option<PathBuf>,
+    ) {
+        let app_state = self.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+            let res = rt.block_on(app_state.start_game(&id, install_path, exe_path, &[]));
+            match res {
+                Ok(info) => app_state.append_log(
+                    "INFO",
+                    &format!("started {} pid={}", info.id, info.pid),
+                ),
+                Err(e) => app_state.append_log(
+                    "ERROR",
+                    &format!("start error {}: {}", id, e),
+                ),
+            }
+        });
+    }
     pub async fn stop_game(
         &self,
         id: &str,
