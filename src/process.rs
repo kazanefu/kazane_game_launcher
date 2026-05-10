@@ -87,33 +87,25 @@ impl ProcessManager {
             install_path.clone()
         };
 
-        // Canonicalize paths to ensure they are absolute and valid
-        let resolved_exe_path = std::fs::canonicalize(&resolved_exe_path).unwrap_or(resolved_exe_path);
-        let working_dir = std::fs::canonicalize(&working_dir).unwrap_or(working_dir);
-
-        // On Windows, strip the UNC prefix (\\?\) if it exists, as some games don't handle it well
-        #[cfg(windows)]
-        let resolved_exe_path = {
-            let s = resolved_exe_path.to_string_lossy();
-            if s.starts_with(r"\\?\") {
-                PathBuf::from(&s[4..])
-            } else {
-                resolved_exe_path
-            }
+        // Ensure paths are absolute (without using canonicalize to avoid \\?\)
+        let resolved_exe_path = if resolved_exe_path.is_absolute() {
+            resolved_exe_path
+        } else {
+            std::env::current_dir()
+                .unwrap_or_default()
+                .join(resolved_exe_path)
         };
-        #[cfg(windows)]
-        let working_dir = {
-            let s = working_dir.to_string_lossy();
-            if s.starts_with(r"\\?\") {
-                PathBuf::from(&s[4..])
-            } else {
-                working_dir
-            }
+        let working_dir = if working_dir.is_absolute() {
+            working_dir
+        } else {
+            std::env::current_dir()
+                .unwrap_or_default()
+                .join(working_dir)
         };
 
         // debug
         eprintln!(
-            "ProcessManager::start - canonical_exe_path={:?} canonical_working_dir={:?} args={:?}",
+            "ProcessManager::start - exe_path={:?} working_dir={:?} args={:?}",
             resolved_exe_path, working_dir, args
         );
 
@@ -123,6 +115,16 @@ impl ProcessManager {
             cmd.args(args);
         }
         cmd.current_dir(&working_dir);
+
+        // Filter out Cargo-specific environment variables that might interfere with asset loading
+        // (especially common if the game is also written in Rust/Bevy and launched via cargo run)
+        let cargo_vars: Vec<String> = std::env::vars()
+            .map(|(k, _)| k)
+            .filter(|k| k.starts_with("CARGO_"))
+            .collect();
+        for var in cargo_vars {
+            cmd.env_remove(var);
+        }
 
         #[cfg(windows)]
         {
