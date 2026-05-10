@@ -44,6 +44,19 @@ where
             .ok_or_else(|| format!("game id not found: {}", id).into())
     }
 
+    fn find_repo_by_local_id(
+        &self,
+        id: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let gd: LocalGameData = file::read_json_with_lock(&self.game_data_path)?;
+        gd.installed
+            .into_iter()
+            .find(|g| g.id == id)
+            .map_or(Err(format!("game id not found: {}", id).into()), |g| {
+                Ok(g.repo)
+            })
+    }
+
     fn parse_owner_repo(url: &str) -> Option<(String, String)> {
         url.strip_prefix("https://github.com/")
             .or_else(|| url.strip_prefix("http://github.com/"))
@@ -241,6 +254,18 @@ where
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let entry = self.find_game_entry(id)?;
         if let Some((owner, repo)) = Self::parse_owner_repo(&entry.repo) {
+            self.provider.fetch_readme(&owner, &repo).await
+        } else {
+            Err(format!("invalid repo url for {}", id).into())
+        }
+    }
+
+    pub async fn get_readme_by_local_id(
+        &self,
+        id: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let url = self.find_repo_by_local_id(id)?;
+        if let Some((owner, repo)) = Self::parse_owner_repo(&url) {
             self.provider.fetch_readme(&owner, &repo).await
         } else {
             Err(format!("invalid repo url for {}", id).into())
