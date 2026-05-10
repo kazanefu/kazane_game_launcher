@@ -1,6 +1,7 @@
 use crate::data::remote::GameListEntry;
 use crate::state::AppState;
-use eframe::egui;
+use eframe::{egui, icon_data::from_png_bytes};
+use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use std::sync::Arc;
 
 pub struct LauncherGui {
@@ -13,6 +14,14 @@ pub struct LauncherGui {
     show_logs: bool,
     current_view: ViewMode,
     last_log: Option<String>,
+    readme: ReadmeEachMode,
+}
+
+#[derive(Default)]
+struct ReadmeEachMode {
+    cache: CommonMarkCache,
+    library: Option<String>,
+    search: Option<String>,
 }
 
 enum ViewMode {
@@ -32,6 +41,7 @@ impl LauncherGui {
             show_logs: false,
             current_view: ViewMode::Library,
             last_log: None,
+            readme: ReadmeEachMode::default(),
         }
     }
 
@@ -164,8 +174,42 @@ impl eframe::App for LauncherGui {
                                     ),
                                 });
                             }
+                            if ui.button("Show README").clicked() {
+                                let id = ig.id.clone();
+                                let app2 = self.app_state.clone();
+                                self.status = "fetching README...".to_string();
+                                let readme_handle = std::thread::spawn(move || {
+                                    let rt = tokio::runtime::Runtime::new().expect("tokio");
+                                    let readme = rt.block_on(app2.get_readme_by_local_id(&id));
+                                    if let Err(e) = &readme {
+                                        app2.append_log(
+                                            "ERROR",
+                                            &format!("error fetching README for {}: {}", id, e),
+                                        );
+                                    } else {
+                                        app2.append_log(
+                                            "INFO",
+                                            &format!("fetched README for {}", id),
+                                        );
+                                    }
+                                    readme
+                                });
+                                let readme_result = readme_handle
+                                    .join()
+                                    .unwrap_or_else(|_| Ok("thread panicked".into()));
+                                self.readme.library =
+                                    Some(readme_result.unwrap_or_else(|e| {
+                                        format!("error fetching README: {}", e)
+                                    }));
+                            }
                         });
                         ui.separator();
+                    }
+                    ui.separator();
+                    if let Some(readme) = &self.readme.library {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            CommonMarkViewer::new().show(ui, &mut self.readme.cache, readme);
+                        });
                     }
                 });
             }
@@ -214,6 +258,37 @@ impl eframe::App for LauncherGui {
                                     }
                                 });
                                 ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
+                                    if ui.button("Show README").clicked() {
+                                        let id = entry.id.clone();
+                                        let app2 = self.app_state.clone();
+                                        self.status = "fetching README...".to_string();
+                                        let readme_handle = std::thread::spawn(move || {
+                                            let rt = tokio::runtime::Runtime::new().expect("tokio");
+                                            let readme = rt.block_on(app2.get_readme_by_id(&id));
+                                            if let Err(e) = &readme {
+                                                app2.append_log(
+                                                    "ERROR",
+                                                    &format!(
+                                                        "error fetching README for {}: {}",
+                                                        id, e
+                                                    ),
+                                                );
+                                            } else {
+                                                app2.append_log(
+                                                    "INFO",
+                                                    &format!("fetched README for {}", id),
+                                                );
+                                            }
+                                            readme
+                                        });
+                                        let readme_result = readme_handle
+                                            .join()
+                                            .unwrap_or_else(|_| Ok("thread panicked".into()));
+                                        self.readme.search =
+                                            Some(readme_result.unwrap_or_else(|e| {
+                                                format!("error fetching README: {}", e)
+                                            }));
+                                    }
                                     if installed.is_none() {
                                         if ui.button("Install").clicked() {
                                             let id = entry.id.clone();
@@ -326,6 +401,11 @@ impl eframe::App for LauncherGui {
                             });
                             ui.separator();
                         }
+                        if let Some(readme) = &self.readme.search {
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                CommonMarkViewer::new().show(ui, &mut self.readme.cache, readme);
+                            });
+                        }
                     });
                 });
             }
@@ -349,7 +429,15 @@ impl eframe::App for LauncherGui {
 
 /// Start the GUI. This function is synchronous and will run the eframe event loop.
 pub fn run_gui(app_state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let native_options = eframe::NativeOptions::default();
+    let icon_bytes = include_bytes!("../../assets/icon/launcher_icon.png");
+    let icon = from_png_bytes(icon_bytes).unwrap();
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("Kazane Game Launcher")
+            .with_icon(icon),
+        ..Default::default()
+    };
+
     let app_state_clone = app_state.clone();
     eframe::run_native(
         "Kazane Game Launcher",
@@ -362,8 +450,32 @@ pub fn run_gui(app_state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error
             } else {
                 ctx.set_visuals(egui::Visuals::light());
             }
+            setup_fonts(ctx);
             Ok(Box::new(LauncherGui::new(app_state_clone.clone())))
         }),
     )?;
     Ok(())
+}
+fn setup_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    fonts.font_data.insert(
+        "jp_font".to_owned(),
+        egui::FontData::from_static(include_bytes!("../../assets/fonts/NotoSansJP-Regular.ttf"))
+            .into(),
+    );
+
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, "jp_font".to_owned());
+
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .push("jp_font".to_owned());
+
+    ctx.set_fonts(fonts);
 }

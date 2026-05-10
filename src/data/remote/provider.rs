@@ -102,8 +102,27 @@ impl GitHubRawProvider {
             }
         }
     }
+    async fn get_text(
+        &self,
+        owner: &str,
+        repo: &str,
+        path: &str,
+    ) -> Result<String, Box<dyn Error + Send + Sync>> {
+        let raw_url = format!(
+            "https://raw.githubusercontent.com/{}/{}/{}/{}",
+            owner,
+            repo,
+            self.branch,
+            path.trim_start_matches('/')
+        );
+        let res = self.client.get(&raw_url).send().await?;
+        if res.status().is_success() {
+            Ok(res.text().await?)
+        } else {
+            Err(format!("HTTP error {} fetching {}", res.status(), raw_url).into())
+        }
+    }
 }
-
 #[async_trait]
 pub trait RemoteProvider: Send + Sync + 'static {
     async fn fetch_game_list(
@@ -116,6 +135,11 @@ pub trait RemoteProvider: Send + Sync + 'static {
         owner: &str,
         repo: &str,
     ) -> Result<ReleaseList, Box<dyn Error + Send + Sync>>;
+    async fn fetch_readme(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<String, Box<dyn Error + Send + Sync>>;
 }
 
 #[async_trait]
@@ -134,5 +158,12 @@ impl RemoteProvider for GitHubRawProvider {
         repo: &str,
     ) -> Result<ReleaseList, Box<dyn Error + Send + Sync>> {
         self.get_json(owner, repo, "launcher/release.json").await
+    }
+    async fn fetch_readme(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<String, Box<dyn Error + Send + Sync>> {
+        self.get_text(owner, repo, "README.md").await
     }
 }
