@@ -204,11 +204,12 @@ impl eframe::App for LauncherGui {
                             }
                         });
                         ui.separator();
-                        if let Some(readme) = &self.readme.library {
-                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                CommonMarkViewer::new().show(ui, &mut self.readme.cache, readme);
-                            });
-                        }
+                    }
+                    ui.separator();
+                    if let Some(readme) = &self.readme.library {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            CommonMarkViewer::new().show(ui, &mut self.readme.cache, readme);
+                        });
                     }
                 });
             }
@@ -405,8 +406,32 @@ pub fn run_gui(app_state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error
             } else {
                 ctx.set_visuals(egui::Visuals::light());
             }
+            setup_fonts(ctx);
             Ok(Box::new(LauncherGui::new(app_state_clone.clone())))
         }),
     )?;
     Ok(())
+}
+fn setup_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    fonts.font_data.insert(
+        "jp_font".to_owned(),
+        egui::FontData::from_static(include_bytes!("../../assets/fonts/NotoSansJP-Regular.ttf"))
+            .into(),
+    );
+
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, "jp_font".to_owned());
+
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .push("jp_font".to_owned());
+
+    ctx.set_fonts(fonts);
 }
